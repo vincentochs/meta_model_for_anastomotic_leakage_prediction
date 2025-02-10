@@ -567,7 +567,7 @@ if selected == 'Prediction':
     )
     
     anast_config = st.sidebar.radio(
-        "Select anast_config:",
+        "Select Anastomotic Configuration:",
         options = tuple(dictionary_categorical_features['anast_config'].keys()),
     )
     
