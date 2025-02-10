@@ -557,12 +557,12 @@ if selected == 'Prediction':
     )
     
     anast_type = st.sidebar.radio(
-        "Select anast_type:",
+        "Select Type of Anastomosis:",
         options = tuple(dictionary_categorical_features['anast_type'].keys()),
     )
     
     anast_technique = st.sidebar.radio(
-        "Select anast_technique:",
+        "Select Anastomotic Technique:",
         options = tuple(dictionary_categorical_features['anast_technique'].keys()),
     )
     
@@ -577,7 +577,7 @@ if selected == 'Prediction':
     )
     
     nutr_status_pts = st.sidebar.radio(
-        "Select nutr_status_pts:",
+        "Select Points of Nutritional Status:",
         options = tuple(dictionary_categorical_features['nutr_status_pts'].keys()),
     )
     
