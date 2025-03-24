@@ -2,7 +2,7 @@
 """
 Created on Thu Feb  6 17:47:52 2025
 
-@author: Edgar David
+@author: Vincent Ochs
 
 This script make an streamlit app for the meta model
 """
@@ -452,9 +452,40 @@ def parser_input(model_1 , model_2 , model_3 , model_4 , meta_model , dataframe_
     y_pred = (y_pred_proba >= 0.5).astype(int)
     
     # Display message with formatted text
+    y_pred_proba_1 = X['Model_1'].values[0]
+    y_pred_proba_2 = X['Model_2'].values[0]
+    y_pred_proba_3 = X['Model_3'].values[0]
+    y_pred_proba_4 = X['Model_4'].values[0]
     st.markdown(
-        f'<p style="font-size:20px;">The AL likelihood with the given inputs is '
-        f'<span style="color:red; font-weight:bold;">{100 * y_pred_proba:.6f}%</span>.</p>',
+        f'<p style="font-size:20px;">The AL likelihood with the given inputs is:</p>',
+        unsafe_allow_html=True
+    )
+    
+    st.markdown(
+        f'<p style="font-size:20px;">'
+        f'<span style="color:red; font-weight:bold;">{100 * y_pred_proba_1 :.2f}% for CatBoost. </span></p>',
+        unsafe_allow_html=True
+    )
+    
+    st.markdown(
+        f'<p style="font-size:20px;">'
+        f'<span style="color:red; font-weight:bold;">{100 * y_pred_proba_2 :.2f}% for Light GBM. </span></p>',
+        unsafe_allow_html=True
+    )
+    st.markdown(
+        f'<p style="font-size:20px;">'
+        f'<span style="color:red; font-weight:bold;">{100 * y_pred_proba_3 :.2f}% for Random Forest. </span></p>',
+        unsafe_allow_html=True
+    )
+    st.markdown(
+        f'<p style="font-size:20px;">'
+        f'<span style="color:red; font-weight:bold;">{100 * y_pred_proba_4 :.2f}% for Bagging. </span></p>',
+        unsafe_allow_html=True
+    )
+    
+    st.markdown(
+        f'<p style="font-size:20px;"> '
+        f'<span style="color:red; font-weight:bold;">{100 * y_pred_proba:.2f}% for Meta Model</span></p>',
         unsafe_allow_html=True
     )
     
@@ -495,6 +526,37 @@ if selected == 'Home':
     \n
     **Disclaimer:** This application and its results are only approved for research purposes.
     """)
+    
+    # Sponsor Images
+    images = [r'images/basel_university.jpeg',
+              r'images/brody.png',
+              r'images/claraspital.png',
+              r'images/emmental.png',
+              r'images/gzo_hospital.png',
+              r'images/hamburg_university.jpeg',
+              r'images/military_university.png',
+              r'images/nova_scotia_healt.png',
+              r'images/tiroler.png',
+              r'images/unlv.png',
+              r'images/vilniaus_university.png',
+              r'images/wuzburg.png',
+              r'images/medtronic.png',
+              r'images/colaborators.png']
+    
+    #st.markdown("---")
+    #st.markdown("<p style='text-align: center;'><strong>Sponsored By:</strong></p>", unsafe_allow_html=True)
+    
+    # Crear columnas para centrar
+    empty_col1, centered_col, empty_col2 = st.columns([1, 2, 1])
+    #with centered_col:
+    #    st.image(images[12], width=350)
+    st.markdown("---")
+    st.markdown("<p style='text-align: center;'><strong>Collaborations:</strong></p>", unsafe_allow_html=True)
+    column_1 , column_2 = st.columns(2 , gap = 'small')
+    with column_2:
+        st.markdown("#")
+    with column_1:
+        st.image(images[13] , width = 720)
 ###############################################################################
 # Prediction page layout
 if selected == 'Prediction':
@@ -512,6 +574,7 @@ if selected == 'Prediction':
     st.markdown("""
     This model predicts the probabilities of AL.
     """)
+    
     # Sidebar layout
     st.sidebar.title("Patiens Info")
     st.sidebar.subheader("Please choose parameters")
@@ -557,17 +620,17 @@ if selected == 'Prediction':
     )
     
     anast_type = st.sidebar.radio(
-        "Select Type of Anastomosis:",
+        "Select anast_type:",
         options = tuple(dictionary_categorical_features['anast_type'].keys()),
     )
     
     anast_technique = st.sidebar.radio(
-        "Select Anastomotic Technique:",
+        "Select anast_technique:",
         options = tuple(dictionary_categorical_features['anast_technique'].keys()),
     )
     
     anast_config = st.sidebar.radio(
-        "Select Anastomotic Configuration:",
+        "Select anast_config:",
         options = tuple(dictionary_categorical_features['anast_config'].keys()),
     )
     
@@ -577,7 +640,7 @@ if selected == 'Prediction':
     )
     
     nutr_status_pts = st.sidebar.radio(
-        "Select Points of Nutritional Status:",
+        "Select nutr_status_pts:",
         options = tuple(dictionary_categorical_features['nutr_status_pts'].keys()),
     )
     
@@ -618,5 +681,35 @@ if selected == 'Prediction':
     predict_button = st.button('Predict')
     if predict_button:
         predictions = parser_input(model_1 , model_2 , model_3 , model_4 , meta_model , dataframe_input)
+    # Sponsor Images
+    images = [r'images/basel_university.jpeg',
+              r'images/brody.png',
+              r'images/claraspital.png',
+              r'images/emmental.png',
+              r'images/gzo_hospital.png',
+              r'images/hamburg_university.jpeg',
+              r'images/military_university.png',
+              r'images/nova_scotia_healt.png',
+              r'images/tiroler.png',
+              r'images/unlv.png',
+              r'images/vilniaus_university.png',
+              r'images/wuzburg.png',
+              r'images/medtronic.png',
+              r'images/colaborators.png']
+    
+    #st.markdown("---")
+    #st.markdown("<p style='text-align: center;'><strong>Sponsored By:</strong></p>", unsafe_allow_html=True)
+    
+    # Crear columnas para centrar
+    empty_col1, centered_col, empty_col2 = st.columns([1, 2, 1])
+    #with centered_col:
+    #    st.image(images[12], width=350)
+    st.markdown("---")
+    st.markdown("<p style='text-align: center;'><strong>Collaborations:</strong></p>", unsafe_allow_html=True)
+    column_1 , column_2 = st.columns(2 , gap = 'small')
+    with column_2:
+        st.markdown("#")
+    with column_1:
+        st.image(images[13] , width = 720)
     
     
