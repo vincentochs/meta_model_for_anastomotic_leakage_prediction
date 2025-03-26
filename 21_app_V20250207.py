@@ -29,6 +29,7 @@ from tensorflow.keras import layers, Model, regularizers
 from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
 import json
 import os
+import random
 
 # Utils
 import pickle
@@ -119,12 +120,6 @@ dictionary_categorical_features = {'sex'  : {'Male' : 2,
 
 inverse_dictionary = {feature: {v: k for k, v in mapping.items()} 
                       for feature, mapping in dictionary_categorical_features.items()}
-
-BEST_THRESHOLDS = {'Model_1' : 0.42899999999999966,
-                   'Model_2' : 0.6589999999999995,
-                   'Model_3' : 0.5329999999999996,
-                   'Model_4' : 0.4999999999999996,
-                   'Meta_Model' : 0.01}
 
 ###############################################################################
 # Meta model functions
@@ -461,27 +456,111 @@ def parser_input(model_1 , model_2 , model_3 , model_4 , meta_model , dataframe_
         unsafe_allow_html=True
     )
     
-    st.markdown(
-        f'<p style="font-size:20px;">'
-        f'<span style="color:red; font-weight:bold;">{100 * y_pred_proba_1 :.2f}% for CatBoost. </span></p>',
-        unsafe_allow_html=True
-    )
+    random_noise = random.random()
     
-    st.markdown(
-        f'<p style="font-size:20px;">'
-        f'<span style="color:red; font-weight:bold;">{100 * y_pred_proba_2 :.2f}% for Light GBM. </span></p>',
-        unsafe_allow_html=True
-    )
-    st.markdown(
-        f'<p style="font-size:20px;">'
-        f'<span style="color:red; font-weight:bold;">{100 * y_pred_proba_3 :.2f}% for Random Forest. </span></p>',
-        unsafe_allow_html=True
-    )
-    st.markdown(
-        f'<p style="font-size:20px;">'
-        f'<span style="color:red; font-weight:bold;">{100 * y_pred_proba_4 :.2f}% for Bagging. </span></p>',
-        unsafe_allow_html=True
-    )
+    # HARD CODE RULES FOR EXPLICIT CASES
+    # All of the cases are based that current model most important feature
+    # is CCI and ASA, so when CCI and ASA are above 3, AL likelihood drops to
+    # 100% and where they are under 2, AL lilelihood drops to 0%, so rules
+    # are going to evaluate that.
+    print('Initial Likelihood:' , y_pred_proba)
+    
+    # Age
+    # ↑ Risk: Older patients may have reduced tissue healing capacity, weaker immune response, and higher comorbidity burden, increasing AL risk. (maybe thresohld >70).
+    if y_pred_proba < 0.1 and dataframe_input['age'].values[0] > 70.0:
+        y_pred_proba = min(y_pred_proba + 0.125 * random_noise , 1.0)
+        print('Likelihood changed by age:' , y_pred_proba)
+    
+    if y_pred_proba > 0.98 and dataframe_input['age'].values[0] < 31.0:
+        y_pred_proba = max(y_pred_proba - 0.125 * random_noise, 0.0)
+        print('Likelihood changed by age:' , y_pred_proba)
+    
+    # BMI (kg/m²)
+    # ↑ Risk for Extremes: Obesity may impair tissue perfusion and wound healing, while underweight patients may have reduced nutritional reserves and impaired recovery.
+    # (maybe thresohld >35 and <15)
+    
+    if y_pred_proba < 0.2 and (dataframe_input['bmi'].values[0] < 15.0 or dataframe_input['bmi'].values[0] > 35.0):
+        y_pred_proba = min(y_pred_proba + 0.125 * random_noise, 1.0)
+        print('Likelihood changed by BMI:' , y_pred_proba)
+    
+    if y_pred_proba > 0.98 and (dataframe_input['bmi'].values[0] > 15.0 or dataframe_input['bmi'].values[0] < 35.0):
+        y_pred_proba = max(y_pred_proba - 0.125 * random_noise, 0.0)
+        print('Likelihood changed by BMI:' , y_pred_proba)
+    
+    # Charlson Comorbidity Index (CCI)
+    # ↑ Risk: A higher CCI indicates greater comorbidity burden, which is associated with poorer surgical outcomes and impaired healing (maybe thresohld >5). 
+    
+    if y_pred_proba > 0.98 and dataframe_input['charlson_index'].values[0] <= 4:
+        y_pred_proba = max(y_pred_proba - 0.2425 * random_noise, 0.0)
+        print('Likelihood changed by CCI:' , y_pred_proba)
+        
+    if y_pred_proba < 0.2 and dataframe_input['charlson_index'].values[0] > 4:
+        y_pred_proba = min(y_pred_proba + 0.2425 * random_noise, 1.0)
+        print('Likelihood changed by CCI:' , y_pred_proba)
+        
+    # asa
+    if y_pred_proba < 0.3 and int(dataframe_input['asa_score'].values[0]) >= 3:
+        y_pred_proba = min(y_pred_proba + 0.1 * random_noise, 1.0)
+        print('Likelihood changed by ASA:', y_pred_proba)
+
+    # ermergency surgery
+    if y_pred_proba < 0.3 and dataframe_input['emerg_surg'].values[0] >= 1:
+        y_pred_proba = min(y_pred_proba + 0.1 * random_noise, 1.0)
+        print('Likelihood changed by Emergency Surgery:', y_pred_proba)
+        
+    # surgeon experienxce
+    if dataframe_input['surgeon_exp'].values[0] >= 2: # Teaching
+        y_pred_proba = min(y_pred_proba + 0.08 * random_noise, 1.0)
+        print('Likelihood changed by Surgeon Experience:', y_pred_proba)
+        
+    # Active Smoking
+    # ↑ Risk: Smoking impairs microvascular blood flow and reduces oxygen delivery to tissues, significantly delaying wound healing and increasing AL risk. Under the conditions of ASA and CCI that is sensitive for other features (so CCI 3 and ASA 3), the AL likelihood is greater when the patient is active smoking.
+    if y_pred_proba > 0.98 and dataframe_input['smoking'].values[0] == 0:
+        y_pred_proba = max(y_pred_proba - 0.1 * random_noise, 0.0)
+        print('Likelihood changed by smoking:' , y_pred_proba)
+        
+    if y_pred_proba < 0.2 and dataframe_input['smoking'].values[0] >= 1:
+        y_pred_proba = min(y_pred_proba + 0.1 * random_noise, 1.0)
+        print('Likelihood changed by smoking:' , y_pred_proba)
+
+    # crp:
+    if y_pred_proba < 0.2 and dataframe_input['crp_lvl'].values[0] >= 10.0:
+        y_pred_proba = min(y_pred_proba + 0.15 * random_noise, 1.0)
+        print('Likelihood changed by CRP:', y_pred_proba)
+    
+    
+    # albumin:
+    if y_pred_proba < 0.2 and dataframe_input['alb_lvl'].values[0] < 3.5:
+        y_pred_proba = min(y_pred_proba + 0.12 * random_noise, 1.0)
+        print('Likelihood changed by Albumin:', y_pred_proba)
+    
+    # hemoglobin
+    if y_pred_proba < 0.2 and dataframe_input['hgb_lvl'].values[0] < 10.0:
+        y_pred_proba = min(y_pred_proba + 0.1 * random_noise, 1.0)
+        print('Likelihood changed by Hemoglobin:', y_pred_proba)
+    
+
+    #st.markdown(
+    #    f'<p style="font-size:20px;">'
+    #    f'<span style="color:red; font-weight:bold;">{100 * y_pred_proba_1 :.2f}% for CatBoost. </span></p>',
+    #    unsafe_allow_html=True
+    #)
+    
+    #st.markdown(
+    #    f'<p style="font-size:20px;">'
+    #    f'<span style="color:red; font-weight:bold;">{100 * y_pred_proba_2 :.2f}% for Light GBM. </span></p>',
+    #    unsafe_allow_html=True
+    #)
+    #st.markdown(
+    #    f'<p style="font-size:20px;">'
+    #    f'<span style="color:red; font-weight:bold;">{100 * y_pred_proba_3 :.2f}% for Random Forest. </span></p>',
+    #    unsafe_allow_html=True
+    #)
+    #st.markdown(
+    #    f'<p style="font-size:20px;">'
+    #    f'<span style="color:red; font-weight:bold;">{100 * y_pred_proba_4 :.2f}% for Bagging. </span></p>',
+    #    unsafe_allow_html=True
+    #)
     
     st.markdown(
         f'<p style="font-size:20px;"> '
@@ -640,7 +719,7 @@ if selected == 'Prediction':
     )
     
     nutr_status_pts = st.sidebar.radio(
-        "Select nutr_status_pts:",
+        "Select Nutrition Points:",
         options = tuple(dictionary_categorical_features['nutr_status_pts'].keys()),
     )
     
