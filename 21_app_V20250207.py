@@ -47,6 +47,35 @@ PATH_SINGLE_MODEL_3 = r'models/Model_3_App.pkl'
 PATH_SINGLE_MODEL_4 = r'models/Model_4_App.pkl'
 random_noise = 0.5
 
+# Risk thresholds
+RISK_THRESHOLDS = {
+    'age_high': 70,
+    'age_low': 30,
+    'bmi_high': 35,
+    'bmi_low': 18.5,
+    'albumin_low': 3.5,
+    'cci_high': 3,
+    'asa_high': 3,
+    'crp_high': 10.0,
+    'hgb_low': 10.0
+}
+
+# Risk multipliers (how much to adjust probability)
+RISK_MULTIPLIERS = {
+    'age': 0.125,
+    'bmi': 0.125,
+    'albumin': 0.12,
+    'cci': 0.1,
+    'asa': 0.1,
+    'smoking': 0.1,
+    'neoadj_therapy': 0.08,
+    'prior_surgery': 0.09,
+    'emergency_surgery': 0.1,
+    'surgeon_exp': 0.08,
+    'approach_open': 0.07,
+    'crp': 0.15,
+    'hemoglobin': 0.1
+}
 
 # Make a dictionary of categorical features
 dictionary_categorical_features = {'sex'  : {'Male' : 2,
@@ -470,82 +499,88 @@ def parser_input(model_1 , model_2 , model_3 , model_4 , meta_model , dataframe_
     # is CCI and ASA, so when CCI and ASA are above 3, AL likelihood drops to
     # 100% and where they are under 2, AL lilelihood drops to 0%, so rules
     # are going to evaluate that.
-    print('Initial Likelihood:' , y_pred_proba)
     
-    # Age
-    # ↑ Risk: Older patients may have reduced tissue healing capacity, weaker immune response, and higher comorbidity burden, increasing AL risk. (maybe thresohld >70).
-    if y_pred_proba < 0.1 and dataframe_input['age'].values[0] > 70.0:
-        y_pred_proba = min(y_pred_proba + 0.125 * random_noise , 1.0)
-        print('Likelihood changed by age:' , y_pred_proba)
+    # PARAMETRIC RISK ADJUSTMENT RULES
+    print('Initial Likelihood:', y_pred_proba)
     
-    if y_pred_proba > 0.98 and dataframe_input['age'].values[0] < 31.0:
-        y_pred_proba = max(y_pred_proba - 0.125 * random_noise, 0.0)
-        print('Likelihood changed by age:' , y_pred_proba)
+    # Age risk adjustment
+    if dataframe_input['age'].values[0] > RISK_THRESHOLDS['age_high']:
+        y_pred_proba = min(y_pred_proba + RISK_MULTIPLIERS['age'] * random_noise, 1.0)
+        print('Likelihood increased by age:', y_pred_proba)
+    elif y_pred_proba > 0.98 and dataframe_input['age'].values[0] < RISK_THRESHOLDS['age_low']:
+        y_pred_proba = max(y_pred_proba - RISK_MULTIPLIERS['age'] * random_noise, 0.0)
+        print('Likelihood decreased by young age:', y_pred_proba)
     
-    # BMI (kg/m²)
-    # ↑ Risk for Extremes: Obesity may impair tissue perfusion and wound healing, while underweight patients may have reduced nutritional reserves and impaired recovery.
-    # (maybe thresohld >35 and <15)
+    # BMI risk adjustment (both extremes increase risk)
+    bmi_val = dataframe_input['bmi'].values[0]
+    if bmi_val < RISK_THRESHOLDS['bmi_low'] or bmi_val > RISK_THRESHOLDS['bmi_high']:
+        y_pred_proba = min(y_pred_proba + RISK_MULTIPLIERS['bmi'] * random_noise, 1.0)
+        print('Likelihood increased by BMI extremes:', y_pred_proba)
     
-    if y_pred_proba < 0.2 and (dataframe_input['bmi'].values[0] < 15.0 or dataframe_input['bmi'].values[0] > 35.0):
-        y_pred_proba = min(y_pred_proba + 0.125 * random_noise, 1.0)
-        print('Likelihood changed by BMI:' , y_pred_proba)
+    # Albumin risk adjustment (low albumin increases risk)
+    if dataframe_input['alb_lvl'].values[0] < RISK_THRESHOLDS['albumin_low']:
+        y_pred_proba = min(y_pred_proba + RISK_MULTIPLIERS['albumin'] * random_noise, 1.0)
+        print('Likelihood increased by low albumin:', y_pred_proba)
     
-    if y_pred_proba > 0.98 and (dataframe_input['bmi'].values[0] > 15.0 or dataframe_input['bmi'].values[0] < 35.0):
-        y_pred_proba = max(y_pred_proba - 0.125 * random_noise, 0.0)
-        print('Likelihood changed by BMI:' , y_pred_proba)
+    # Charlson Comorbidity Index
+    cci_val = int(dataframe_input['charlson_index'].values[0])
+    if cci_val > RISK_THRESHOLDS['cci_high']:
+        y_pred_proba = min(y_pred_proba + RISK_MULTIPLIERS['cci'] * random_noise * cci_val, 1.0)
+        print('Likelihood increased by high CCI:', y_pred_proba)
+    elif y_pred_proba > 0.98 and cci_val <= RISK_THRESHOLDS['cci_high']:
+        y_pred_proba = max(y_pred_proba - RISK_MULTIPLIERS['cci'] * random_noise, 0.0)
+        print('Likelihood decreased by low CCI:', y_pred_proba)
     
-    # Charlson Comorbidity Index (CCI)
-    # ↑ Risk: A higher CCI indicates greater comorbidity burden, which is associated with poorer surgical outcomes and impaired healing (maybe thresohld >5). 
+    # ASA Score (higher is worse)
+    asa_val = int(dataframe_input['asa_score'].values[0])
+    if asa_val >= RISK_THRESHOLDS['asa_high']:
+        y_pred_proba = min(y_pred_proba + RISK_MULTIPLIERS['asa'] * random_noise * asa_val, 1.0)
+        print('Likelihood increased by high ASA:', y_pred_proba)
     
-    if y_pred_proba > 0.98 and dataframe_input['charlson_index'].values[0] <= 4:
-        y_pred_proba = max(y_pred_proba - 0.2425 * random_noise, 0.0)
-        print('Likelihood changed by CCI:' , y_pred_proba)
+    # Smoking increases risk
+    if dataframe_input['smoking'].values[0] >= 1:
+        y_pred_proba = min(y_pred_proba + RISK_MULTIPLIERS['smoking'] * random_noise, 1.0)
+        print('Likelihood increased by smoking:', y_pred_proba)
+    elif y_pred_proba > 0.98 and dataframe_input['smoking'].values[0] == 0:
+        y_pred_proba = max(y_pred_proba - RISK_MULTIPLIERS['smoking'] * random_noise, 0.0)
+        print('Likelihood decreased by non-smoking:', y_pred_proba)
+    
+    # Neoadjuvant therapy increases risk
+    if dataframe_input['neoadj_therapy'].values[0] >= 1:
+        y_pred_proba = min(y_pred_proba + RISK_MULTIPLIERS['neoadj_therapy'] * random_noise, 1.0)
+        print('Likelihood increased by neoadjuvant therapy:', y_pred_proba)
+    
+    # Prior abdominal surgery increases risk
+    if dataframe_input['prior_surgery'].values[0] >= 2:  # 'Yes' is mapped to 2
+        y_pred_proba = min(y_pred_proba + RISK_MULTIPLIERS['prior_surgery'] * random_noise, 1.0)
+        print('Likelihood increased by prior surgery:', y_pred_proba)
+    
+    # Emergency surgery increases risk
+    if dataframe_input['emerg_surg'].values[0] >= 1:
+        y_pred_proba = min(y_pred_proba + RISK_MULTIPLIERS['emergency_surgery'] * random_noise, 1.0)
+        print('Likelihood increased by emergency surgery:', y_pred_proba)
+    
+    # Surgical approach (open approaches are riskier than laparoscopic/robotic)
+    approach_val = int(dataframe_input['approach'].values[0])
+    if approach_val in [3, 4]:  # Open to open, Conversion to open
+        y_pred_proba = min(y_pred_proba + RISK_MULTIPLIERS['approach_open'] * random_noise, 1.0)
+        print('Likelihood increased by open approach:', y_pred_proba)
+    
+    # Surgeon experience (teaching operation is riskier)
+    if dataframe_input['surgeon_exp'].values[0] >= 2:  # Teaching operation
+        y_pred_proba = min(y_pred_proba + RISK_MULTIPLIERS['surgeon_exp'] * random_noise, 1.0)
+        print('Likelihood increased by teaching operation:', y_pred_proba)
+    
+    # CRP level increases risk
+    if dataframe_input['crp_lvl'].values[0] >= RISK_THRESHOLDS['crp_high']:
+        y_pred_proba = min(y_pred_proba + RISK_MULTIPLIERS['crp'] * random_noise, 1.0)
+        print('Likelihood increased by high CRP:', y_pred_proba)
+    
+    # Hemoglobin level (low hemoglobin increases risk)
+    if dataframe_input['hgb_lvl'].values[0] < RISK_THRESHOLDS['hgb_low']:
+        y_pred_proba = min(y_pred_proba + RISK_MULTIPLIERS['hemoglobin'] * random_noise, 1.0)
+        print('Likelihood increased by low hemoglobin:', y_pred_proba)
         
-    if y_pred_proba < 0.2 and dataframe_input['charlson_index'].values[0] > 4:
-        y_pred_proba = min(y_pred_proba + 0.2425 * random_noise, 1.0)
-        print('Likelihood changed by CCI:' , y_pred_proba)
-        
-    # asa
-    if y_pred_proba < 0.3 and int(dataframe_input['asa_score'].values[0]) >= 3:
-        y_pred_proba = min(y_pred_proba + 0.1 * random_noise, 1.0)
-        print('Likelihood changed by ASA:', y_pred_proba)
-
-    # ermergency surgery
-    if y_pred_proba < 0.3 and dataframe_input['emerg_surg'].values[0] >= 1:
-        y_pred_proba = min(y_pred_proba + 0.1 * random_noise, 1.0)
-        print('Likelihood changed by Emergency Surgery:', y_pred_proba)
-        
-    # surgeon experienxce
-    if dataframe_input['surgeon_exp'].values[0] >= 2: # Teaching
-        y_pred_proba = min(y_pred_proba + 0.08 * random_noise, 1.0)
-        print('Likelihood changed by Surgeon Experience:', y_pred_proba)
-        
-    # Active Smoking
-    # ↑ Risk: Smoking impairs microvascular blood flow and reduces oxygen delivery to tissues, significantly delaying wound healing and increasing AL risk. Under the conditions of ASA and CCI that is sensitive for other features (so CCI 3 and ASA 3), the AL likelihood is greater when the patient is active smoking.
-    if y_pred_proba > 0.98 and dataframe_input['smoking'].values[0] == 0:
-        y_pred_proba = max(y_pred_proba - 0.1 * random_noise, 0.0)
-        print('Likelihood changed by smoking:' , y_pred_proba)
-        
-    if y_pred_proba < 0.2 and dataframe_input['smoking'].values[0] >= 1:
-        y_pred_proba = min(y_pred_proba + 0.1 * random_noise, 1.0)
-        print('Likelihood changed by smoking:' , y_pred_proba)
-
-    # crp:
-    if y_pred_proba < 0.2 and dataframe_input['crp_lvl'].values[0] >= 10.0:
-        y_pred_proba = min(y_pred_proba + 0.15 * random_noise, 1.0)
-        print('Likelihood changed by CRP:', y_pred_proba)
-    
-    
-    # albumin:
-    if y_pred_proba < 0.2 and dataframe_input['alb_lvl'].values[0] < 3.5:
-        y_pred_proba = min(y_pred_proba + 0.12 * random_noise, 1.0)
-        print('Likelihood changed by Albumin:', y_pred_proba)
-    
-    # hemoglobin
-    if y_pred_proba < 0.2 and dataframe_input['hgb_lvl'].values[0] < 10.0:
-        y_pred_proba = min(y_pred_proba + 0.1 * random_noise, 1.0)
-        print('Likelihood changed by Hemoglobin:', y_pred_proba)
-    
 
     #st.markdown(
     #    f'<p style="font-size:20px;">'
