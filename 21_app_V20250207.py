@@ -45,6 +45,7 @@ PATH_SINGLE_MODEL_1 = r'models/Model_1_App.pkl'
 PATH_SINGLE_MODEL_2 = r'models/Model_2_App.pkl'
 PATH_SINGLE_MODEL_3 = r'models/Model_3_App.pkl'
 PATH_SINGLE_MODEL_4 = r'models/Model_4_App.pkl'
+random_noise = 0.5
 
 
 # Make a dictionary of categorical features
@@ -410,18 +411,24 @@ def load_attention_meta_model(save_dir, model_name="attention_meta_model", forma
     return loaded_model
 ##############################################################################
 # Section when the app initialize and load the required information
-#@st.cache_data() # We use this decorator so this initialization doesn't run every time the user change into the page
-def initialize_app():
-    
+@st.cache_resource
+def load_single_models():
     model_1 = joblib.load(PATH_SINGLE_MODEL_1)
     model_2 = joblib.load(PATH_SINGLE_MODEL_2)
     model_3 = joblib.load(PATH_SINGLE_MODEL_3)
     model_4 = joblib.load(PATH_SINGLE_MODEL_4)
-    meta_model = load_attention_meta_model(PATH_META_MODEL, f"attention_meta_model_app" , format = 'keras')
+    return model_1, model_2, model_3, model_4
 
+@st.cache_resource
+def load_meta_model():
+    return load_attention_meta_model(PATH_META_MODEL, "attention_meta_model_app", format='keras')
+
+@st.cache_resource
+def initialize_app():
+    model_1, model_2, model_3, model_4 = load_single_models()
+    meta_model = load_meta_model()
     print('App Initialized correctly!')
-    
-    return model_1 , model_2 , model_3 , model_4 , meta_model
+    return model_1, model_2, model_3, model_4, meta_model
 
 ###############################################################################
 # Parser input function
@@ -456,7 +463,7 @@ def parser_input(model_1 , model_2 , model_3 , model_4 , meta_model , dataframe_
         unsafe_allow_html=True
     )
     
-    random_noise = random.random()
+    #random_noise = random.random()
     
     # HARD CODE RULES FOR EXPLICIT CASES
     # All of the cases are based that current model most important feature
