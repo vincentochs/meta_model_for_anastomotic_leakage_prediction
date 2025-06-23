@@ -134,11 +134,10 @@ dictionary_categorical_features = {'sex'  : {'Male' : 2,
                                                  '5: Conversion to laparoscopy' : 5,
                                                  '6: Transanal' : 6},
                                    'anast_type' : {'Colon Anastomosis' : 1,
-                                                   'Colorectal Anastomosis' : 2,
+                                                   #'Colorectal Anastomosis' : 2,
                                                    'Ileocolonic Anastomosis' : 3},
                                    'anast_technique' : {'1: Stapler' : 1,
-                                                        '2: Hand-sewn' : 2,
-                                                        '3: Stapler and Hand-sewn' : 3},
+                                                        '2: Hand-sewn' : 2},
                                    'anast_config' :{'End to End' : 1,
                                                     'Side to End' : 2,
                                                     'Side to Side' : 3,
@@ -580,30 +579,7 @@ def parser_input(model_1 , model_2 , model_3 , model_4 , meta_model , dataframe_
     if dataframe_input['hgb_lvl'].values[0] < RISK_THRESHOLDS['hgb_low']:
         y_pred_proba = min(y_pred_proba + RISK_MULTIPLIERS['hemoglobin'] * random_noise, 1.0)
         print('Likelihood increased by low hemoglobin:', y_pred_proba)
-        
-
-    #st.markdown(
-    #    f'<p style="font-size:20px;">'
-    #    f'<span style="color:red; font-weight:bold;">{100 * y_pred_proba_1 :.2f}% for CatBoost. </span></p>',
-    #    unsafe_allow_html=True
-    #)
-    
-    #st.markdown(
-    #    f'<p style="font-size:20px;">'
-    #    f'<span style="color:red; font-weight:bold;">{100 * y_pred_proba_2 :.2f}% for Light GBM. </span></p>',
-    #    unsafe_allow_html=True
-    #)
-    #st.markdown(
-    #    f'<p style="font-size:20px;">'
-    #    f'<span style="color:red; font-weight:bold;">{100 * y_pred_proba_3 :.2f}% for Random Forest. </span></p>',
-    #    unsafe_allow_html=True
-    #)
-    #st.markdown(
-    #    f'<p style="font-size:20px;">'
-    #    f'<span style="color:red; font-weight:bold;">{100 * y_pred_proba_4 :.2f}% for Bagging. </span></p>',
-    #    unsafe_allow_html=True
-    #)
-    
+          
     st.markdown(
         f'<p style="font-size:20px;"> '
         f'<span style="color:red; font-weight:bold;">{100 * y_pred_proba:.2f}% for Meta Model</span></p>',
@@ -741,17 +717,17 @@ if selected == 'Prediction':
     )
     
     anast_type = st.sidebar.radio(
-        "Select anast_type:",
+        "Select Anastomotic Type:",
         options = tuple(dictionary_categorical_features['anast_type'].keys()),
     )
     
     anast_technique = st.sidebar.radio(
-        "Select anast_technique:",
+        "Select Anastomotic Technique:",
         options = tuple(dictionary_categorical_features['anast_technique'].keys()),
     )
     
     anast_config = st.sidebar.radio(
-        "Select anast_config:",
+        "Select Anastomotic Configuration:",
         options = tuple(dictionary_categorical_features['anast_config'].keys()),
     )
     
