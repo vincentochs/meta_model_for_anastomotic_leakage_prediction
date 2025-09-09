@@ -100,11 +100,12 @@ dictionary_categorical_features = {'sex'  : {'Male' : 2,
                                                        '13' : 13,
                                                        '14' : 14,
                                                        '15' : 15,
-                                                       '16' : 16},
+                                                       '16' : 16,
+                                                       'Unknown' : -1},
                                    'asa_score' : {'1: Healthy Person' : 1,
                                                   '2: Mild Systemic disease' : 2,
-                                                  '3: Severe syatemic disease' : 3,
-                                                  '4: Severe systemic disease that is a constan threat to life' : 4,
+                                                  '3: Severe Systemic disease' : 3,
+                                                  '4: Severe Systemic disease that is a constant threat to life' : 4,
                                                   '5: Moribund person' : 5},
                                    'prior_surgery' :  {'Yes' : 2,
                                                       'No' : 1},
@@ -129,7 +130,7 @@ dictionary_categorical_features = {'sex'  : {'Male' : 2,
                                                   'No' : 0},
                                    'approach' :{'1: Laparoscopic' : 1 ,
                                                  '2: Robotic' : 2 ,
-                                                 '3: Open to open' : 3,
+                                                 '3: Open' : 3,
                                                  '4: Conversion to open' : 4,
                                                  '5: Conversion to laparoscopy' : 5,
                                                  '6: Transanal' : 6},
@@ -141,7 +142,8 @@ dictionary_categorical_features = {'sex'  : {'Male' : 2,
                                    'anast_config' :{'End to End' : 1,
                                                     'Side to End' : 2,
                                                     'Side to Side' : 3,
-                                                    'End to Side' : 4},
+                                                    'End to Side' : 4,
+                                                    'Unknown' : -1},
                                    'surgeon_exp' : {'Consultant' : 1,
                                                     'Teaching Operation' : 2},
                                    'nutr_status_pts' : {str(i) : i for i in range(7)}
@@ -462,121 +464,130 @@ def initialize_app():
 # Parser input function
 def parser_input(model_1 , model_2 , model_3 , model_4 , meta_model , dataframe_input):
     
-    # Transform category inputs
-    for i in dictionary_categorical_features.keys():
-        if i in dataframe_input.columns:
-            dataframe_input[i] = dataframe_input[i].map(dictionary_categorical_features[i])
+    # Handle mapping for categorical features, preserving -1 for "Not Available"
+    for col_name in dictionary_categorical_features.keys():
+        if col_name in dataframe_input.columns:
+            value = dataframe_input.at[0, col_name]
+            # If value is a string (e.g., 'Male'), map it. If it's -1, leave it.
+            if isinstance(value, str) and value in dictionary_categorical_features[col_name]:
+                dataframe_input.at[0, col_name] = dictionary_categorical_features[col_name][value]
     
     # Create vector for meta model
     columns_input = model_1.feature_names_in_.tolist()
-    X = pd.DataFrame({'Model_1' : model_1.predict_proba(dataframe_input[columns_input])[: , 1],
-                      'Model_2' : model_2.predict_proba(dataframe_input[columns_input])[: , 1],
-                      'Model_3' : model_3.predict_proba(dataframe_input[columns_input])[: , 1],
-                      'Model_4' : model_4.predict_proba(dataframe_input[columns_input])[: , 1]})
+    
+    # Fill -1 values with a strategy (e.g., mean/median) before predicting if models can't handle it
+    # For now, we assume the preprocessing pipeline inside the model handles it.
+    df_for_prediction = dataframe_input.copy()
+
+    X = pd.DataFrame({'Model_1' : model_1.predict_proba(df_for_prediction[columns_input])[: , 1],
+                      'Model_2' : model_2.predict_proba(df_for_prediction[columns_input])[: , 1],
+                      'Model_3' : model_3.predict_proba(df_for_prediction[columns_input])[: , 1],
+                      'Model_4' : model_4.predict_proba(df_for_prediction[columns_input])[: , 1]})
     X = pd.concat([X.reset_index(drop = True),
-                   pd.DataFrame(model_1[:-2].transform(dataframe_input[columns_input]) ,
+                   pd.DataFrame(model_1[:-2].transform(df_for_prediction[columns_input]) ,
                                 columns = model_1[:-2].get_feature_names_out().tolist())] , axis = 1)
     
     # Make predictions
     y_pred_proba = predict_with_attention_model(meta_model, X)
     y_pred = (y_pred_proba >= 0.5).astype(int)
     
-    # Display message with formatted text
-    y_pred_proba_1 = X['Model_1'].values[0]
-    y_pred_proba_2 = X['Model_2'].values[0]
-    y_pred_proba_3 = X['Model_3'].values[0]
-    y_pred_proba_4 = X['Model_4'].values[0]
     st.markdown(
         f'<p style="font-size:20px;">The AL likelihood with the given inputs is:</p>',
         unsafe_allow_html=True
     )
     
-    #random_noise = random.random()
-    
-    # HARD CODE RULES FOR EXPLICIT CASES
-    # All of the cases are based that current model most important feature
-    # is CCI and ASA, so when CCI and ASA are above 3, AL likelihood drops to
-    # 100% and where they are under 2, AL lilelihood drops to 0%, so rules
-    # are going to evaluate that.
-    
     # PARAMETRIC RISK ADJUSTMENT RULES
     print('Initial Likelihood:', y_pred_proba)
+
+    # Added checks for -1 (Not Available) before applying any rule.
     
     # Age risk adjustment
-    if dataframe_input['age'].values[0] > RISK_THRESHOLDS['age_high']:
-        y_pred_proba = min(y_pred_proba + RISK_MULTIPLIERS['age'] * random_noise, 1.0)
-        print('Likelihood increased by age:', y_pred_proba)
-    elif y_pred_proba > 0.98 and dataframe_input['age'].values[0] < RISK_THRESHOLDS['age_low']:
-        y_pred_proba = max(y_pred_proba - RISK_MULTIPLIERS['age'] * random_noise, 0.0)
-        print('Likelihood decreased by young age:', y_pred_proba)
+    age_val = dataframe_input['age'].values[0]
+    if age_val != -1:
+        if age_val > RISK_THRESHOLDS['age_high']:
+            y_pred_proba = min(y_pred_proba + RISK_MULTIPLIERS['age'] * random_noise, 1.0)
+            print('Likelihood increased by age:', y_pred_proba)
+        elif y_pred_proba > 0.98 and age_val < RISK_THRESHOLDS['age_low']:
+            y_pred_proba = max(y_pred_proba - RISK_MULTIPLIERS['age'] * random_noise, 0.0)
+            print('Likelihood decreased by young age:', y_pred_proba)
     
-    # BMI risk adjustment (both extremes increase risk)
+    # BMI risk adjustment
     bmi_val = dataframe_input['bmi'].values[0]
-    if bmi_val < RISK_THRESHOLDS['bmi_low'] or bmi_val > RISK_THRESHOLDS['bmi_high']:
+    if bmi_val != -1 and (bmi_val < RISK_THRESHOLDS['bmi_low'] or bmi_val > RISK_THRESHOLDS['bmi_high']):
         y_pred_proba = min(y_pred_proba + RISK_MULTIPLIERS['bmi'] * random_noise, 1.0)
         print('Likelihood increased by BMI extremes:', y_pred_proba)
     
-    # Albumin risk adjustment (low albumin increases risk)
-    if dataframe_input['alb_lvl'].values[0] < RISK_THRESHOLDS['albumin_low']:
+    # Albumin risk adjustment
+    alb_val = dataframe_input['alb_lvl'].values[0]
+    if alb_val != -1 and alb_val < RISK_THRESHOLDS['albumin_low']:
         y_pred_proba = min(y_pred_proba + RISK_MULTIPLIERS['albumin'] * random_noise, 1.0)
         print('Likelihood increased by low albumin:', y_pred_proba)
     
     # Charlson Comorbidity Index
     cci_val = int(dataframe_input['charlson_index'].values[0])
-    if cci_val > RISK_THRESHOLDS['cci_high']:
-        y_pred_proba = min(y_pred_proba + RISK_MULTIPLIERS['cci'] * random_noise * cci_val, 1.0)
-        print('Likelihood increased by high CCI:', y_pred_proba)
-    elif y_pred_proba > 0.98 and cci_val <= RISK_THRESHOLDS['cci_high']:
-        y_pred_proba = max(y_pred_proba - RISK_MULTIPLIERS['cci'] * random_noise, 0.0)
-        print('Likelihood decreased by low CCI:', y_pred_proba)
+    if cci_val != -1:
+        if cci_val > RISK_THRESHOLDS['cci_high']:
+            y_pred_proba = min(y_pred_proba + RISK_MULTIPLIERS['cci'] * random_noise * cci_val, 1.0)
+            print('Likelihood increased by high CCI:', y_pred_proba)
+        elif y_pred_proba > 0.98 and cci_val <= RISK_THRESHOLDS['cci_high']:
+            y_pred_proba = max(y_pred_proba - RISK_MULTIPLIERS['cci'] * random_noise, 0.0)
+            print('Likelihood decreased by low CCI:', y_pred_proba)
     
-    # ASA Score (higher is worse)
+    # ASA Score
     asa_val = int(dataframe_input['asa_score'].values[0])
-    if asa_val >= RISK_THRESHOLDS['asa_high']:
+    if asa_val != -1 and asa_val >= RISK_THRESHOLDS['asa_high']:
         y_pred_proba = min(y_pred_proba + RISK_MULTIPLIERS['asa'] * random_noise * asa_val, 1.0)
         print('Likelihood increased by high ASA:', y_pred_proba)
     
-    # Smoking increases risk
-    if dataframe_input['smoking'].values[0] >= 1:
-        y_pred_proba = min(y_pred_proba + RISK_MULTIPLIERS['smoking'] * random_noise, 1.0)
-        print('Likelihood increased by smoking:', y_pred_proba)
-    elif y_pred_proba > 0.98 and dataframe_input['smoking'].values[0] == 0:
-        y_pred_proba = max(y_pred_proba - RISK_MULTIPLIERS['smoking'] * random_noise, 0.0)
-        print('Likelihood decreased by non-smoking:', y_pred_proba)
+    # Smoking
+    smoking_val = dataframe_input['smoking'].values[0]
+    if smoking_val != -1:
+        if smoking_val >= 1: # Yes
+            y_pred_proba = min(y_pred_proba + RISK_MULTIPLIERS['smoking'] * random_noise, 1.0)
+            print('Likelihood increased by smoking:', y_pred_proba)
+        elif y_pred_proba > 0.98 and smoking_val == 0: # No
+            y_pred_proba = max(y_pred_proba - RISK_MULTIPLIERS['smoking'] * random_noise, 0.0)
+            print('Likelihood decreased by non-smoking:', y_pred_proba)
     
-    # Neoadjuvant therapy increases risk
-    if dataframe_input['neoadj_therapy'].values[0] >= 1:
+    # Neoadjuvant therapy
+    neoadj_val = dataframe_input['neoadj_therapy'].values[0]
+    if neoadj_val != -1 and neoadj_val >= 1:
         y_pred_proba = min(y_pred_proba + RISK_MULTIPLIERS['neoadj_therapy'] * random_noise, 1.0)
         print('Likelihood increased by neoadjuvant therapy:', y_pred_proba)
     
-    # Prior abdominal surgery increases risk
-    if dataframe_input['prior_surgery'].values[0] >= 2:  # 'Yes' is mapped to 2
+    # Prior abdominal surgery
+    prior_surg_val = dataframe_input['prior_surgery'].values[0]
+    if prior_surg_val != -1 and prior_surg_val >= 2:  # 'Yes' is mapped to 2
         y_pred_proba = min(y_pred_proba + RISK_MULTIPLIERS['prior_surgery'] * random_noise, 1.0)
         print('Likelihood increased by prior surgery:', y_pred_proba)
     
-    # Emergency surgery increases risk
-    if dataframe_input['emerg_surg'].values[0] >= 1:
+    # Emergency surgery
+    emerg_surg_val = dataframe_input['emerg_surg'].values[0]
+    if emerg_surg_val != -1 and emerg_surg_val >= 1:
         y_pred_proba = min(y_pred_proba + RISK_MULTIPLIERS['emergency_surgery'] * random_noise, 1.0)
         print('Likelihood increased by emergency surgery:', y_pred_proba)
     
-    # Surgical approach (open approaches are riskier than laparoscopic/robotic)
+    # Surgical approach
     approach_val = int(dataframe_input['approach'].values[0])
-    if approach_val in [3, 4]:  # Open to open, Conversion to open
+    if approach_val != -1 and approach_val in [3, 4]:  # Open or Conversion to open
         y_pred_proba = min(y_pred_proba + RISK_MULTIPLIERS['approach_open'] * random_noise, 1.0)
         print('Likelihood increased by open approach:', y_pred_proba)
     
-    # Surgeon experience (teaching operation is riskier)
-    if dataframe_input['surgeon_exp'].values[0] >= 2:  # Teaching operation
+    # Surgeon experience
+    surgeon_exp_val = dataframe_input['surgeon_exp'].values[0]
+    if surgeon_exp_val != -1 and surgeon_exp_val >= 2:  # Teaching operation
         y_pred_proba = min(y_pred_proba + RISK_MULTIPLIERS['surgeon_exp'] * random_noise, 1.0)
         print('Likelihood increased by teaching operation:', y_pred_proba)
     
-    # CRP level increases risk
-    if dataframe_input['crp_lvl'].values[0] >= RISK_THRESHOLDS['crp_high']:
+    # CRP level
+    crp_val = dataframe_input['crp_lvl'].values[0]
+    if crp_val != -1 and crp_val >= RISK_THRESHOLDS['crp_high']:
         y_pred_proba = min(y_pred_proba + RISK_MULTIPLIERS['crp'] * random_noise, 1.0)
         print('Likelihood increased by high CRP:', y_pred_proba)
     
-    # Hemoglobin level (low hemoglobin increases risk)
-    if dataframe_input['hgb_lvl'].values[0] < RISK_THRESHOLDS['hgb_low']:
+    # Hemoglobin level
+    hgb_val = dataframe_input['hgb_lvl'].values[0]
+    if hgb_val != -1 and hgb_val < RISK_THRESHOLDS['hgb_low']:
         y_pred_proba = min(y_pred_proba + RISK_MULTIPLIERS['hemoglobin'] * random_noise, 1.0)
         print('Likelihood increased by low hemoglobin:', y_pred_proba)
           
@@ -640,13 +651,6 @@ if selected == 'Home':
               r'images/medtronic.png',
               r'images/colaborators.png']
     
-    #st.markdown("---")
-    #st.markdown("<p style='text-align: center;'><strong>Sponsored By:</strong></p>", unsafe_allow_html=True)
-    
-    # Crear columnas para centrar
-    empty_col1, centered_col, empty_col2 = st.columns([1, 2, 1])
-    #with centered_col:
-    #    st.image(images[12], width=350)
     st.markdown("---")
     st.markdown("<p style='text-align: center;'><strong>Collaborations:</strong></p>", unsafe_allow_html=True)
     column_1 , column_2 = st.columns(2 , gap = 'small')
@@ -661,7 +665,7 @@ if selected == 'Prediction':
     st.subheader("Description")
     st.subheader("To predict AL, you need to follow the steps below:")
     st.markdown("""
-    1. Enter clinical parameters of patient on the left side bar.
+    1. Enter clinical parameters of patient on the left side bar. If a parameter is unknown, check the corresponding "Not Available" box.
     2. Press the "Predict" button and wait for the result.
     \n
     \n
@@ -673,84 +677,115 @@ if selected == 'Prediction':
     """)
     
     # Sidebar layout
-    st.sidebar.title("Patiens Info")
+    st.sidebar.title("Patient Info")
     st.sidebar.subheader("Please choose parameters")
     
-    # Input features
-    # Numeric
-    age = st.sidebar.number_input("Age(Years):" , step = 1.0)
-    bmi = st.sidebar.number_input("Preoperative BMI:" , step = 0.5)
-    hgb_lvl = st.sidebar.number_input("Hemoglobin Level:" , step = 0.1)
-    wbc_count = st.sidebar.number_input("WBC Count:" , step = 0.1)
-    alb_lvl = st.sidebar.number_input("Albumin Level:" , step = 0.1)
-    crp_lvl = st.sidebar.number_input("CRP Level:" , step = 0.1)
+    # MODIFICATION: Added a "Not Available" checkbox for each input.
+    # The value will be set to -1 if the box is checked.
     
-    # Selection
-    sex = st.sidebar.radio(
-        "Select Sex:",
-        options = tuple(dictionary_categorical_features['sex'].keys()),
-    )
+    # Numeric Inputs
+    age_na = st.sidebar.checkbox("Age: Not Available")
+    if not age_na:
+        age = st.sidebar.number_input("Age (Years):", step=1.0, disabled=age_na, value=40.0)
+    if age_na: age = -1
+
+    bmi_na = st.sidebar.checkbox("Preoperative BMI: Not Available")
+    if not bmi_na:
+        bmi = st.sidebar.number_input("Preoperative BMI:", step=0.5, disabled=bmi_na, value=25.0)
+    if bmi_na: bmi = -1
     
-    charlson_index= st.sidebar.radio(
-        "Select Charlson Index:",
-        options = tuple(dictionary_categorical_features['charlson_index'].keys()),
-    )
+    hgb_lvl_na = st.sidebar.checkbox("Hemoglobin Level: Not Available")
+    if not hgb_lvl_na:
+        hgb_lvl = st.sidebar.number_input("Hemoglobin Level:", step=0.1, disabled=hgb_lvl_na, value=12.0)
+    if hgb_lvl_na: hgb_lvl = -1
+
+    wbc_count_na = st.sidebar.checkbox("White blood cell count (WBC): Not Available")
+    if not wbc_count_na:
+        wbc_count = st.sidebar.number_input("White blood cell count (WBC):", step=0.1, disabled=wbc_count_na, value=7.0)
+    if wbc_count_na: wbc_count = -1
     
-    asa_score = st.sidebar.radio(
-        "Select ASA Score:",
-        options = tuple(dictionary_categorical_features['asa_score'].keys()),
-    )
+    alb_lvl_na = st.sidebar.checkbox("Albumin Level: Not Available")
+    if not alb_lvl_na:
+        alb_lvl = st.sidebar.number_input("Albumin Level (g/dL):", step=0.1, disabled=alb_lvl_na, value=4.0)
+    if alb_lvl_na: alb_lvl = -1
+
+    crp_lvl_na = st.sidebar.checkbox("CRP Level: Not Available")
+    if not crp_lvl_na:
+        crp_lvl = st.sidebar.number_input("CRP Level:", step=0.1, disabled=crp_lvl_na, value=5.0)
+    if crp_lvl_na: crp_lvl = -1
+
+    # Selection Inputs
+    st.sidebar.markdown("---")
+    sex_na = st.sidebar.checkbox("Sex: Not Available")
+    if not sex_na:
+        sex = st.sidebar.radio("Select Sex:", options=tuple(dictionary_categorical_features['sex'].keys()))
+    if sex_na: sex = -1
     
-    indication = st.sidebar.radio(
-        "Select Indication:",
-        options = tuple(dictionary_categorical_features['indication'].keys()),
-    )
+    # NOTE: Charlson Index already has 'Unknown' which maps to -1, so no NA box is needed.
+    charlson_index = st.sidebar.radio("Select Charlson Comorbidity Index (CCI):", options=tuple(dictionary_categorical_features['charlson_index'].keys()))
     
-    operation = st.sidebar.radio(
-        "Select Operation:",
-        options = tuple(dictionary_categorical_features['operation'].keys()),
-    )
+    asa_score_na = st.sidebar.checkbox("ASA Score: Not Available")
+    if not asa_score_na:
+        asa_score = st.sidebar.radio("Select ASA Score:", options=tuple(dictionary_categorical_features['asa_score'].keys()))
+    if asa_score_na: asa_score = -1
+
+    indication_na = st.sidebar.checkbox("Indication: Not Available")
+    if not indication_na:
+        indication = st.sidebar.radio("Select Indication:", options=tuple(dictionary_categorical_features['indication'].keys()))
+    if indication_na: indication = -1
+
+    operation_na = st.sidebar.checkbox("Operation: Not Available")
+    if not operation_na:
+        operation = st.sidebar.radio("Select Operation:", options=tuple(dictionary_categorical_features['operation'].keys()))
+    if operation_na: operation = -1
+
+    approach_na = st.sidebar.checkbox("Approach: Not Available")
+    if not approach_na:
+        approach = st.sidebar.radio("Select Approach:", options=tuple(dictionary_categorical_features['approach'].keys()))
+    if approach_na: approach = -1
+
+    anast_type_na = st.sidebar.checkbox("Anastomotic Type: Not Available")
+    if not anast_type_na:
+        anast_type = st.sidebar.radio("Select Anastomotic Type:", options=tuple(dictionary_categorical_features['anast_type'].keys()))
+    if anast_type_na: anast_type = -1
+
+    anast_technique_na = st.sidebar.checkbox("Anastomotic Technique: Not Available")
+    if not anast_technique_na:
+        anast_technique = st.sidebar.radio("Select Anastomotic Technique:", options=tuple(dictionary_categorical_features['anast_technique'].keys()))
+    if anast_technique_na: anast_technique = -1
+
+    # NOTE: Anastomotic Configuration already has 'Unknown' which maps to -1.
+    anast_config = st.sidebar.radio("Select Anastomotic Configuration:", options=tuple(dictionary_categorical_features['anast_config'].keys()))
     
-    approach = st.sidebar.radio(
-        "Select Approach:",
-        options = tuple(dictionary_categorical_features['approach'].keys()),
-    )
-    
-    anast_type = st.sidebar.radio(
-        "Select Anastomotic Type:",
-        options = tuple(dictionary_categorical_features['anast_type'].keys()),
-    )
-    
-    anast_technique = st.sidebar.radio(
-        "Select Anastomotic Technique:",
-        options = tuple(dictionary_categorical_features['anast_technique'].keys()),
-    )
-    
-    anast_config = st.sidebar.radio(
-        "Select Anastomotic Configuration:",
-        options = tuple(dictionary_categorical_features['anast_config'].keys()),
-    )
-    
-    surgeon_exp = st.sidebar.radio(
-        "Select Surgeon Experience:",
-        options = tuple(dictionary_categorical_features['surgeon_exp'].keys()),
-    )
-    
-    nutr_status_pts = st.sidebar.radio(
-        "Select Nutrition Points:",
-        options = tuple(dictionary_categorical_features['nutr_status_pts'].keys()),
-    )
-    
-    # Map binary options
+    surgeon_exp_na = st.sidebar.checkbox("Surgeon Experience: Not Available")
+    if not surgeon_exp_na:
+        surgeon_exp = st.sidebar.radio("Select Surgeon Experience:", options=tuple(dictionary_categorical_features['surgeon_exp'].keys()))
+    if surgeon_exp_na: surgeon_exp = -1
+
+    nutr_status_pts_na = st.sidebar.checkbox("Nutritional Risk Screening (NRS): Not Available")
+    if not nutr_status_pts_na:
+        nutr_status_pts = st.sidebar.radio("Select Nutritional Risk Screening (NRS):", options=tuple(dictionary_categorical_features['nutr_status_pts'].keys()))
+    if nutr_status_pts_na: nutr_status_pts = -1
+
+    # Binary options
+    st.sidebar.markdown("---")
     st.sidebar.subheader("Medical Conditions (Yes/No):")
-    smoking = int(st.sidebar.checkbox("Smoking"))
-    smoking = inverse_dictionary['smoking'][smoking]
-    neoadj_therapy = int(st.sidebar.checkbox("Neoadjuvant Therapy"))
-    neoadj_therapy = inverse_dictionary['neoadj_therapy'][neoadj_therapy]
-    prior_surgery = int(st.sidebar.checkbox("Prior abdominal surgery")) + 1
-    prior_surgery = inverse_dictionary['prior_surgery'][prior_surgery]
-    emerg_surg = int(st.sidebar.checkbox("Emergency surgery"))
-    emerg_surg = inverse_dictionary['emerg_surg'][emerg_surg]
+
+    smoking_na = st.sidebar.checkbox("Smoking: Not Available")
+    smoking_yes = st.sidebar.checkbox("Smoking", disabled=smoking_na)
+    smoking = -1 if smoking_na else ("Yes" if smoking_yes else "No")
+
+    neoadj_therapy_na = st.sidebar.checkbox("Neoadjuvant Therapy: Not Available")
+    neoadj_therapy_yes = st.sidebar.checkbox("Neoadjuvant Therapy", disabled=neoadj_therapy_na)
+    neoadj_therapy = -1 if neoadj_therapy_na else ("Yes" if neoadj_therapy_yes else "No")
+    
+    prior_surgery_na = st.sidebar.checkbox("Prior abdominal surgery: Not Available")
+    prior_surgery_yes = st.sidebar.checkbox("Prior abdominal surgery", disabled=prior_surgery_na)
+    prior_surgery = -1 if prior_surgery_na else ("Yes" if prior_surgery_yes else "No")
+
+    emerg_surg_na = st.sidebar.checkbox("Emergency surgery: Not Available")
+    emerg_surg_yes = st.sidebar.checkbox("Emergency surgery", disabled=emerg_surg_na)
+    emerg_surg = -1 if emerg_surg_na else ("Yes" if emerg_surg_yes else "No")
     
     # Create dataframe with the input data
     dataframe_input = pd.DataFrame({'age' : [age],
@@ -774,11 +809,11 @@ if selected == 'Prediction':
                                     'anast_config' : [anast_config],
                                     'surgeon_exp' : [surgeon_exp],
                                     'nutr_status_pts' : [nutr_status_pts]})
-    # Parser input and make predictions
+    
     predict_button = st.button('Predict')
     if predict_button:
         predictions = parser_input(model_1 , model_2 , model_3 , model_4 , meta_model , dataframe_input)
-    # Sponsor Images
+    
     images = [r'images/basel_university.jpeg',
               r'images/brody.png',
               r'images/claraspital.png',
@@ -794,13 +829,6 @@ if selected == 'Prediction':
               r'images/medtronic.png',
               r'images/colaborators.png']
     
-    #st.markdown("---")
-    #st.markdown("<p style='text-align: center;'><strong>Sponsored By:</strong></p>", unsafe_allow_html=True)
-    
-    # Crear columnas para centrar
-    empty_col1, centered_col, empty_col2 = st.columns([1, 2, 1])
-    #with centered_col:
-    #    st.image(images[12], width=350)
     st.markdown("---")
     st.markdown("<p style='text-align: center;'><strong>Collaborations:</strong></p>", unsafe_allow_html=True)
     column_1 , column_2 = st.columns(2 , gap = 'small')
@@ -808,5 +836,4 @@ if selected == 'Prediction':
         st.markdown("#")
     with column_1:
         st.image(images[13] , width = 720)
-    
-    
+
