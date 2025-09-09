@@ -696,12 +696,12 @@ if selected == 'Prediction':
     
     hgb_lvl_na = st.sidebar.checkbox("Hemoglobin Level: Not Available")
     if not hgb_lvl_na:
-        hgb_lvl = st.sidebar.number_input("Hemoglobin Level:", step=0.1, disabled=hgb_lvl_na, value=12.0)
+        hgb_lvl = st.sidebar.number_input("Hemoglobin Level (g/dL):", step=0.1, disabled=hgb_lvl_na, value=12.0)
     if hgb_lvl_na: hgb_lvl = -1
 
     wbc_count_na = st.sidebar.checkbox("White blood cell count (WBC): Not Available")
     if not wbc_count_na:
-        wbc_count = st.sidebar.number_input("White blood cell count (WBC):", step=0.1, disabled=wbc_count_na, value=7.0)
+        wbc_count = st.sidebar.number_input("White blood cell count (WBC) (10³/µL):", step=0.1, disabled=wbc_count_na, value=7.0)
     if wbc_count_na: wbc_count = -1
     
     alb_lvl_na = st.sidebar.checkbox("Albumin Level: Not Available")
@@ -711,7 +711,7 @@ if selected == 'Prediction':
 
     crp_lvl_na = st.sidebar.checkbox("CRP Level: Not Available")
     if not crp_lvl_na:
-        crp_lvl = st.sidebar.number_input("CRP Level:", step=0.1, disabled=crp_lvl_na, value=5.0)
+        crp_lvl = st.sidebar.number_input("CRP Level (mg/L):", step=0.1, disabled=crp_lvl_na, value=5.0)
     if crp_lvl_na: crp_lvl = -1
 
     # Selection Inputs
@@ -836,5 +836,6 @@ if selected == 'Prediction':
         st.markdown("#")
     with column_1:
         st.image(images[13] , width = 720)
+
 
 
