@@ -4,7 +4,7 @@ Created on Thu Feb  6 17:47:52 2025
 
 @author: Vincent Ochs
 
-This script make an streamlit app for the meta model
+This script makes an streamlit app for the meta model
 """
 
 ###############################################################################
@@ -624,11 +624,11 @@ with st.sidebar:
 if selected == 'Home':
     st.title('AL Prediction App')
     st.markdown("""
-    This app contains 2 sections which you can access from the horizontal menu above.\n
+    This app contains 2 sections which you can access from the sidebar menu on the left..\n
     The sections are:\n
     Home: The main page of the app.\n
     **Prediction:** On this section you can select the patients information and
-    the models predict AL Future Value.\n
+    run the models to predict AL risk.\n
     \n
     \n
     \n
@@ -665,7 +665,7 @@ if selected == 'Prediction':
     st.subheader("Description")
     st.subheader("To predict AL, you need to follow the steps below:")
     st.markdown("""
-    1. Enter clinical parameters of patient on the left side bar. If a parameter is unknown, check the corresponding "Not Available" box.
+    1. Enter the patient’s clinical parameters on the left side bar. If a parameter is unknown, check the corresponding "Not Available" box.
     2. Press the "Predict" button and wait for the result.
     \n
     \n
@@ -836,4 +836,5 @@ if selected == 'Prediction':
         st.markdown("#")
     with column_1:
         st.image(images[13] , width = 720)
+
 
