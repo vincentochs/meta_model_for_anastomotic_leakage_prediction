@@ -683,109 +683,169 @@ if selected == 'Prediction':
     # MODIFICATION: Added a "Not Available" checkbox for each input.
     # The value will be set to -1 if the box is checked.
     
-    # Numeric Inputs
-    age_na = st.sidebar.checkbox("Age: Not Available")
+    # Sidebar layout
+    st.sidebar.title("Patient Info")
+    st.sidebar.subheader("Please choose parameters")
+    
+    # MODIFICATION: Moved "Not Available" checkbox below each input feature
+    # The value will be set to -1 if the box is checked.
+    
+    # Sidebar layout
+    st.sidebar.title("Patient Info")
+    st.sidebar.subheader("Please choose parameters")
+    
+    # --- Numeric Inputs ---
+    
+    # Age
+    age_placeholder = st.sidebar.empty() # 1. Create a placeholder for the input widget.
+    age_na = st.sidebar.checkbox("Age: Not Available", key="age_na") # 2. Display the checkbox below the placeholder.
+    
     if not age_na:
-        age = st.sidebar.number_input("Age (Years):", step=1.0, disabled=age_na, value=40.0)
-    if age_na: age = -1
-
-    bmi_na = st.sidebar.checkbox("Preoperative BMI: Not Available")
+        # 3. If unchecked, fill the placeholder with the number input.
+        age = age_placeholder.number_input("Age (Years):", step=1.0, value=40.0)
+    else:
+        # 4. If checked, the placeholder remains empty and we set the value.
+        age = -1
+    
+    # BMI
+    bmi_placeholder = st.sidebar.empty()
+    bmi_na = st.sidebar.checkbox("BMI: Not Available", key="bmi_na")
     if not bmi_na:
-        bmi = st.sidebar.number_input("Preoperative BMI:", step=0.5, disabled=bmi_na, value=25.0)
-    if bmi_na: bmi = -1
+        bmi = bmi_placeholder.number_input("Preoperative BMI:", step=0.5, value=25.0)
+    else:
+        bmi = -1
     
-    hgb_lvl_na = st.sidebar.checkbox("Hemoglobin Level: Not Available")
+    # Hemoglobin Level
+    hgb_lvl_placeholder = st.sidebar.empty()
+    hgb_lvl_na = st.sidebar.checkbox("Hemoglobin Level(g/dL): Not Available", key="hgb_lvl_na")
     if not hgb_lvl_na:
-        hgb_lvl = st.sidebar.number_input("Hemoglobin Level (g/dL):", step=0.1, disabled=hgb_lvl_na, value=12.0)
-    if hgb_lvl_na: hgb_lvl = -1
-
-    wbc_count_na = st.sidebar.checkbox("White blood cell count (WBC): Not Available")
-    if not wbc_count_na:
-        wbc_count = st.sidebar.number_input("White blood cell count (WBC) (10³/µL):", step=0.1, disabled=wbc_count_na, value=7.0)
-    if wbc_count_na: wbc_count = -1
+        hgb_lvl = hgb_lvl_placeholder.number_input("Hemoglobin Level (g/dL):", step=0.1, value=12.0)
+    else:
+        hgb_lvl = -1
     
-    alb_lvl_na = st.sidebar.checkbox("Albumin Level: Not Available")
+    # White blood cell count
+    wbc_count_placeholder = st.sidebar.empty()
+    wbc_count_na = st.sidebar.checkbox("White blood cell count: Not Available", key="wbc_count_na")
+    if not wbc_count_na:
+        wbc_count = wbc_count_placeholder.number_input("White blood cell count (WBC) (10³/µL):", step=0.1, value=7.0)
+    else:
+        wbc_count = -1
+    
+    # Albumin Level
+    alb_lvl_placeholder = st.sidebar.empty()
+    alb_lvl_na = st.sidebar.checkbox("Albumin Level: Not Available", key="alb_lvl_na")
     if not alb_lvl_na:
-        alb_lvl = st.sidebar.number_input("Albumin Level (g/dL):", step=0.1, disabled=alb_lvl_na, value=4.0)
-    if alb_lvl_na: alb_lvl = -1
-
-    crp_lvl_na = st.sidebar.checkbox("CRP Level: Not Available")
+        alb_lvl = alb_lvl_placeholder.number_input("Albumin Level (g/dL):", step=0.1, value=4.0)
+    else:
+        alb_lvl = -1
+    
+    # CRP Level
+    crp_lvl_placeholder = st.sidebar.empty()
+    crp_lvl_na = st.sidebar.checkbox("CRP Level: Not Available", key="crp_lvl_na")
     if not crp_lvl_na:
-        crp_lvl = st.sidebar.number_input("CRP Level (mg/L):", step=0.1, disabled=crp_lvl_na, value=5.0)
-    if crp_lvl_na: crp_lvl = -1
-
-    # Selection Inputs
+        crp_lvl = crp_lvl_placeholder.number_input("CRP Level (mg/L):", step=0.1, value=5.0)
+    else:
+        crp_lvl = -1
+    
+    # --- Selection Inputs ---
     st.sidebar.markdown("---")
-    sex_na = st.sidebar.checkbox("Sex: Not Available")
+    
+    # Sex
+    sex_placeholder = st.sidebar.empty()
+    sex_na = st.sidebar.checkbox("Sex: Not Available", key="sex_na")
     if not sex_na:
-        sex = st.sidebar.radio("Select Sex:", options=tuple(dictionary_categorical_features['sex'].keys()))
-    if sex_na: sex = -1
+        sex = sex_placeholder.radio("Select Sex:", options=tuple(dictionary_categorical_features['sex'].keys()))
+    else:
+        sex = -1
     
     # NOTE: Charlson Index already has 'Unknown' which maps to -1, so no NA box is needed.
     charlson_index = st.sidebar.radio("Select Charlson Comorbidity Index (CCI):", options=tuple(dictionary_categorical_features['charlson_index'].keys()))
     
-    asa_score_na = st.sidebar.checkbox("ASA Score: Not Available")
+    # ASA Score
+    asa_score_placeholder = st.sidebar.empty()
+    asa_score_na = st.sidebar.checkbox("ASA Score: Not Available", key="asa_score_na")
     if not asa_score_na:
-        asa_score = st.sidebar.radio("Select ASA Score:", options=tuple(dictionary_categorical_features['asa_score'].keys()))
-    if asa_score_na: asa_score = -1
-
-    indication_na = st.sidebar.checkbox("Indication: Not Available")
-    if not indication_na:
-        indication = st.sidebar.radio("Select Indication:", options=tuple(dictionary_categorical_features['indication'].keys()))
-    if indication_na: indication = -1
-
-    operation_na = st.sidebar.checkbox("Operation: Not Available")
-    if not operation_na:
-        operation = st.sidebar.radio("Select Operation:", options=tuple(dictionary_categorical_features['operation'].keys()))
-    if operation_na: operation = -1
-
-    approach_na = st.sidebar.checkbox("Approach: Not Available")
-    if not approach_na:
-        approach = st.sidebar.radio("Select Approach:", options=tuple(dictionary_categorical_features['approach'].keys()))
-    if approach_na: approach = -1
-
-    anast_type_na = st.sidebar.checkbox("Anastomotic Type: Not Available")
-    if not anast_type_na:
-        anast_type = st.sidebar.radio("Select Anastomotic Type:", options=tuple(dictionary_categorical_features['anast_type'].keys()))
-    if anast_type_na: anast_type = -1
-
-    anast_technique_na = st.sidebar.checkbox("Anastomotic Technique: Not Available")
-    if not anast_technique_na:
-        anast_technique = st.sidebar.radio("Select Anastomotic Technique:", options=tuple(dictionary_categorical_features['anast_technique'].keys()))
-    if anast_technique_na: anast_technique = -1
-
-    # NOTE: Anastomotic Configuration already has 'Unknown' which maps to -1.
-    anast_config = st.sidebar.radio("Select Anastomotic Configuration:", options=tuple(dictionary_categorical_features['anast_config'].keys()))
+        asa_score = asa_score_placeholder.radio("Select ASA Score:", options=tuple(dictionary_categorical_features['asa_score'].keys()))
+    else:
+        asa_score = -1
     
-    surgeon_exp_na = st.sidebar.checkbox("Surgeon Experience: Not Available")
+    # Indication
+    indication_placeholder = st.sidebar.empty()
+    indication_na = st.sidebar.checkbox("Indication: Not Available", key="indication_na")
+    if not indication_na:
+        indication = indication_placeholder.radio("Select Indication:", options=tuple(dictionary_categorical_features['indication'].keys()))
+    else:
+        indication = -1
+    
+    # Operation
+    operation_placeholder = st.sidebar.empty()
+    operation_na = st.sidebar.checkbox("Operation: Not Available" , key = "operation_na")
+    if not operation_na:
+        operation = operation_placeholder.radio("Select Operation:", options=tuple(dictionary_categorical_features['operation'].keys()))
+    else:
+        operation = -1
+    
+    # Approach
+    approach_placeholder = st.sidebar.empty()
+    approach_na = st.sidebar.checkbox("Approach: Not Available" , key = "approach_na")
+    if not approach_na:
+        approach = approach_placeholder.radio("Select Approach:", options=tuple(dictionary_categorical_features['approach'].keys()))
+    else:
+        approach = -1
+    
+    # Anastomotic type
+    anast_type_placeholder = st.sidebar.empty()
+    anast_type_na = st.sidebar.checkbox("Anastomotic Type: Not Available" , key = "anast_type_na")
+    if not anast_type_na:
+        anast_type = anast_type_placeholder.radio("Select Anastomotic Type:", options=tuple(dictionary_categorical_features['anast_type'].keys()))
+    else:
+        anast_type = -1
+        
+    # Anastomotic technique
+    anast_technique_placeholder = st.sidebar.empty()
+    anast_technique_na = st.sidebar.checkbox("Anastomotic Technique: Not Available" , key = "anast_technique_na")
+    if not anast_technique_na:
+        anast_technique = anast_technique_placeholder.radio("Select Anastomotic Technique:", options=tuple(dictionary_categorical_features['anast_technique'].keys()))
+    else:
+        anast_technique = -1
+        
+    # Anastomotic configuration
+    anast_config_placeholder = st.sidebar.empty()
+    anast_config_na = st.sidebar.checkbox("Anastomotic Configuration: Not Available" , key = "anast_config_na")
+    if not anast_config_na:
+        anast_config = anast_config_placeholder.radio("Select Anastomotic Configuration:", options=tuple(dictionary_categorical_features['anast_config'].keys()))
+    else:
+        anast_config = -1
+        
+    # Surgeon Experience
+    surgeon_exp_placeholder = st.sidebar.empty()
+    surgeon_exp_na = st.sidebar.checkbox("Surgeon Experience: Not Available" , key = "surgeon_exp_na")
     if not surgeon_exp_na:
-        surgeon_exp = st.sidebar.radio("Select Surgeon Experience:", options=tuple(dictionary_categorical_features['surgeon_exp'].keys()))
-    if surgeon_exp_na: surgeon_exp = -1
-
-    nutr_status_pts_na = st.sidebar.checkbox("Nutritional Risk Screening (NRS): Not Available")
+        surgeon_exp = surgeon_exp_placeholder.radio("Select Surgeon Experience:", options=tuple(dictionary_categorical_features['surgeon_exp'].keys()))
+    else:
+        surgeon_exp = -1
+    
+    #  Nutritional Risk Screening
+    nutr_status_pts_placeholder = st.sidebar.empty()
+    nutr_status_pts_na = st.sidebar.checkbox("Nutritional Risk Screening: Not Available", key="nutr_status_pts_na")
     if not nutr_status_pts_na:
-        nutr_status_pts = st.sidebar.radio("Select Nutritional Risk Screening (NRS):", options=tuple(dictionary_categorical_features['nutr_status_pts'].keys()))
-    if nutr_status_pts_na: nutr_status_pts = -1
+        nutr_status_pts = nutr_status_pts_placeholder.radio("Select Nutritional Risk Screening (NRS):", options=tuple(dictionary_categorical_features['nutr_status_pts'].keys()))
+    else:
+        nutr_status_pts = -1
+    
 
     # Binary options
     st.sidebar.markdown("---")
+
     st.sidebar.subheader("Medical Conditions (Yes/No):")
-
-    smoking_na = st.sidebar.checkbox("Smoking: Not Available")
-    smoking_yes = st.sidebar.checkbox("Smoking", disabled=smoking_na)
-    smoking = -1 if smoking_na else ("Yes" if smoking_yes else "No")
-
-    neoadj_therapy_na = st.sidebar.checkbox("Neoadjuvant Therapy: Not Available")
-    neoadj_therapy_yes = st.sidebar.checkbox("Neoadjuvant Therapy", disabled=neoadj_therapy_na)
-    neoadj_therapy = -1 if neoadj_therapy_na else ("Yes" if neoadj_therapy_yes else "No")
-    
-    prior_surgery_na = st.sidebar.checkbox("Prior abdominal surgery: Not Available")
-    prior_surgery_yes = st.sidebar.checkbox("Prior abdominal surgery", disabled=prior_surgery_na)
-    prior_surgery = -1 if prior_surgery_na else ("Yes" if prior_surgery_yes else "No")
-
-    emerg_surg_na = st.sidebar.checkbox("Emergency surgery: Not Available")
-    emerg_surg_yes = st.sidebar.checkbox("Emergency surgery", disabled=emerg_surg_na)
-    emerg_surg = -1 if emerg_surg_na else ("Yes" if emerg_surg_yes else "No")
+    smoking = int(st.sidebar.checkbox("Smoking"))
+    smoking = inverse_dictionary['smoking'][smoking]
+    neoadj_therapy = int(st.sidebar.checkbox("Neoadjuvant Therapy"))
+    neoadj_therapy = inverse_dictionary['neoadj_therapy'][neoadj_therapy]
+    prior_surgery = int(st.sidebar.checkbox("Prior abdominal surgery")) + 1
+    prior_surgery = inverse_dictionary['prior_surgery'][prior_surgery]
+    emerg_surg = int(st.sidebar.checkbox("Emergency surgery"))
+    emerg_surg = inverse_dictionary['emerg_surg'][emerg_surg]
     
     # Create dataframe with the input data
     dataframe_input = pd.DataFrame({'age' : [age],
@@ -836,6 +896,5 @@ if selected == 'Prediction':
         st.markdown("#")
     with column_1:
         st.image(images[13] , width = 720)
-
 
 
