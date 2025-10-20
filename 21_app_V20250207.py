@@ -14,6 +14,7 @@ This script makes an streamlit app for the meta model
 import streamlit as st
 from streamlit_option_menu import option_menu
 import altair as alt
+from streamlit_carousel import carousel
 
 # Utils
 import pandas as pd
@@ -636,7 +637,8 @@ if selected == 'Home':
     """)
     
     # Sponsor Images
-    images = [r'images/basel_university.jpeg',
+    images = [r'images/basel.png',
+              r'images/basel_university.png',
               r'images/brody.png',
               r'images/claraspital.png',
               r'images/emmental.png',
@@ -648,16 +650,87 @@ if selected == 'Home':
               r'images/unlv.png',
               r'images/vilniaus_university.png',
               r'images/wuzburg.png',
-              r'images/medtronic.png',
-              r'images/colaborators.png']
-    
+              r'images/medtronic.png']
+
     st.markdown("---")
     st.markdown("<p style='text-align: center;'><strong>Collaborations:</strong></p>", unsafe_allow_html=True)
-    column_1 , column_2 = st.columns(2 , gap = 'small')
-    with column_2:
-        st.markdown("#")
-    with column_1:
-        st.image(images[13] , width = 720)
+    partner_logos = [
+    {
+        "title": "",
+        "text": "",
+        "img": images[0]
+    },
+    {
+        "title": "",
+        "text" : "",
+        "img": images[1]
+    },
+    {
+        "title": "",
+        "text" : "",
+        "img": images[2]
+    },
+    {
+        "title": "",
+        "text" : "",
+        "img": images[3]
+    },
+    {
+        "title": "",
+        "text" : "",
+        "img": images[4]
+    },
+    {
+        "title": "",
+        "text" : "",
+        "img": images[5]
+    },
+    {
+        "title": "",
+        "text" : "",
+        "img": images[6]
+    },
+    {
+        "title": "",
+        "text" : "",
+        "img": images[7]
+    },
+    {
+        "title": "",
+        "text" : "",
+        "img": images[8]
+    },
+    {
+        "title": "",
+        "text" : "",
+        "img": images[9]
+    },
+    {
+        "title": "",
+        "text" : "",
+        "img": images[10]
+    },
+    {
+        "title": "",
+        "text" : "",
+        "img": images[11]
+    },
+    {
+        "title": "",
+        "text" : "",
+        "img": images[12]
+    },
+    {
+        "title": "",
+        "text" : "",
+        "img": images[13]
+    }]
+    # Check if images exist before creating the carousel
+    valid_logos = [item for item in partner_logos if os.path.exists(item['img'])]
+    if valid_logos:
+        carousel(items=valid_logos, width=0.75)
+    else:
+        st.warning("Could not find sponsor images. Please ensure the 'images' directory is present.")
 ###############################################################################
 # Prediction page layout
 if selected == 'Prediction':
@@ -874,7 +947,9 @@ if selected == 'Prediction':
     if predict_button:
         predictions = parser_input(model_1 , model_2 , model_3 , model_4 , meta_model , dataframe_input)
     
-    images = [r'images/basel_university.jpeg',
+    # Sponsor Images
+    images = [r'images/basel.png',
+              r'images/basel_university.png',
               r'images/brody.png',
               r'images/claraspital.png',
               r'images/emmental.png',
@@ -886,15 +961,84 @@ if selected == 'Prediction':
               r'images/unlv.png',
               r'images/vilniaus_university.png',
               r'images/wuzburg.png',
-              r'images/medtronic.png',
-              r'images/colaborators.png']
-    
+              r'images/medtronic.png']
+
     st.markdown("---")
     st.markdown("<p style='text-align: center;'><strong>Collaborations:</strong></p>", unsafe_allow_html=True)
-    column_1 , column_2 = st.columns(2 , gap = 'small')
-    with column_2:
-        st.markdown("#")
-    with column_1:
-        st.image(images[13] , width = 720)
-
-
+    partner_logos = [
+    {
+        "title": "",
+        "text": "",
+        "img": images[0]
+    },
+    {
+        "title": "",
+        "text" : "",
+        "img": images[1]
+    },
+    {
+        "title": "",
+        "text" : "",
+        "img": images[2]
+    },
+    {
+        "title": "",
+        "text" : "",
+        "img": images[3]
+    },
+    {
+        "title": "",
+        "text" : "",
+        "img": images[4]
+    },
+    {
+        "title": "",
+        "text" : "",
+        "img": images[5]
+    },
+    {
+        "title": "",
+        "text" : "",
+        "img": images[6]
+    },
+    {
+        "title": "",
+        "text" : "",
+        "img": images[7]
+    },
+    {
+        "title": "",
+        "text" : "",
+        "img": images[8]
+    },
+    {
+        "title": "",
+        "text" : "",
+        "img": images[9]
+    },
+    {
+        "title": "",
+        "text" : "",
+        "img": images[10]
+    },
+    {
+        "title": "",
+        "text" : "",
+        "img": images[11]
+    },
+    {
+        "title": "",
+        "text" : "",
+        "img": images[12]
+    },
+    {
+        "title": "",
+        "text" : "",
+        "img": images[13]
+    }]
+    # Check if images exist before creating the carousel
+    valid_logos = [item for item in partner_logos if os.path.exists(item['img'])]
+    if valid_logos:
+        carousel(items=valid_logos, width=0.75)
+    else:
+        st.warning("Could not find sponsor images. Please ensure the 'images' directory is present.")
