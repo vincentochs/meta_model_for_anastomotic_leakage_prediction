@@ -639,7 +639,10 @@ if selected == 'Home':
     # Sponsor Images
     images = [r'images/basel.png',
               r'images/basel_university.png',
+              r'images/kanospital_baseland.png',
               r'images/brody.png',
+              r'images/fluidai.jpeg',
+              r'images/escp.png',
               r'images/claraspital.png',
               r'images/emmental.png',
               r'images/gzo_hospital.png',
@@ -724,11 +727,26 @@ if selected == 'Home':
         "title": "",
         "text" : "",
         "img": images[13]
+    },
+    {
+        "title": "",
+        "text" : "",
+        "img": images[14]
+    },
+    {
+        "title": "",
+        "text" : "",
+        "img": images[15]
+    },
+    {
+        "title": "",
+        "text" : "",
+        "img": images[16]
     }]
     # Check if images exist before creating the carousel
     valid_logos = [item for item in partner_logos if os.path.exists(item['img'])]
     if valid_logos:
-        carousel(items=valid_logos, width=0.75)
+        carousel(items=valid_logos, width=0.70 , container_height = 400)
     else:
         st.warning("Could not find sponsor images. Please ensure the 'images' directory is present.")
 ###############################################################################
@@ -950,7 +968,10 @@ if selected == 'Prediction':
     # Sponsor Images
     images = [r'images/basel.png',
               r'images/basel_university.png',
+              r'images/kanospital_baseland.png',
               r'images/brody.png',
+              r'images/fluidai.jpeg',
+              r'images/escp.png',
               r'images/claraspital.png',
               r'images/emmental.png',
               r'images/gzo_hospital.png',
@@ -1035,10 +1056,25 @@ if selected == 'Prediction':
         "title": "",
         "text" : "",
         "img": images[13]
+    },
+    {
+        "title": "",
+        "text" : "",
+        "img": images[14]
+    },
+    {
+        "title": "",
+        "text" : "",
+        "img": images[15]
+    },
+    {
+        "title": "",
+        "text" : "",
+        "img": images[16]
     }]
     # Check if images exist before creating the carousel
     valid_logos = [item for item in partner_logos if os.path.exists(item['img'])]
     if valid_logos:
-        carousel(items=valid_logos, width=0.75)
+        carousel(items=valid_logos, width=0.70 , container_height = 400)
     else:
         st.warning("Could not find sponsor images. Please ensure the 'images' directory is present.")
