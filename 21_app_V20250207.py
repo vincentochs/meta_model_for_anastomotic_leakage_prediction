@@ -643,7 +643,6 @@ if selected == 'Home':
               r'images/brody.png',
               r'images/fluidai.jpeg',
               r'images/escp.png',
-              r'images/claraspital.png',
               r'images/emmental.png',
               r'images/gzo_hospital.png',
               r'images/hamburg_university.jpeg',
@@ -737,11 +736,6 @@ if selected == 'Home':
         "title": "",
         "text" : "",
         "img": images[15]
-    },
-    {
-        "title": "",
-        "text" : "",
-        "img": images[16]
     }]
     # Check if images exist before creating the carousel
     valid_logos = [item for item in partner_logos if os.path.exists(item['img'])]
@@ -972,7 +966,6 @@ if selected == 'Prediction':
               r'images/brody.png',
               r'images/fluidai.jpeg',
               r'images/escp.png',
-              r'images/claraspital.png',
               r'images/emmental.png',
               r'images/gzo_hospital.png',
               r'images/hamburg_university.jpeg',
@@ -1066,11 +1059,6 @@ if selected == 'Prediction':
         "title": "",
         "text" : "",
         "img": images[15]
-    },
-    {
-        "title": "",
-        "text" : "",
-        "img": images[16]
     }]
     # Check if images exist before creating the carousel
     valid_logos = [item for item in partner_logos if os.path.exists(item['img'])]
