@@ -49,13 +49,13 @@ PATH_SINGLE_MODEL_4 = r'models/Model_4_App.pkl'
 
 # --- Calibration Parameters ---
 CLINICAL_BASELINE_PROB = 0.065  # The real-world average AL rate (6.5%)
-MODEL_RAW_AVERAGE_PROB = 0.015  # REPLACE THIS with your model's current average raw prediction
+MODEL_RAW_AVERAGE_PROB = 0.0001
 
 # Risk thresholds
 RISK_THRESHOLDS = {
     'age_high': 70,
     'age_low': 30,
-    'bmi_high': 35,
+    'bmi_high': 30,  # Lowered from 35 (Clinical obesity Class I is where risk significantly rises)
     'bmi_low': 18.5,
     'albumin_low': 3.5,
     'cci_high': 3,
@@ -69,27 +69,27 @@ RISK_THRESHOLDS = {
 
 # Log-Odds Adjustments (Positive values strictly increase probability)
 LOG_ODDS_MULTIPLIERS = {
-    'age_high': 0.40,
+    'age_high': 0.40,               # OR ~ 1.5
     'age_low': -0.20,
-    'bmi_extreme': 0.35,
-    'albumin_low': 0.50,
-    'cci_high': 0.25, # Per point over threshold
-    'asa_high': 0.30, # Per point over threshold
-    'smoking': 0.40,
-    'neoadj_therapy': 0.35,
-    'prior_surgery': 0.35,
-    'emergency_surgery': 0.45,
+    'bmi_extreme': 0.55,            # Increased from 0.35 (OR ~ 1.7)
+    'albumin_low': 0.85,            # Increased from 0.50 (OR ~ 2.3)
+    'cci_high': 0.25,               # Per point over threshold
+    'asa_high': 0.40,               # Increased from 0.30 (OR ~ 1.5 per point)
+    'smoking': 0.55,                # Increased from 0.40 (OR ~ 1.7)
+    'neoadj_therapy': 0.65,         # Increased from 0.35 (OR ~ 1.9)
+    'prior_surgery': 0.35,          
+    'emergency_surgery': 0.80,      # Increased from 0.45 (OR ~ 2.2)
     'approach_open': 0.40,
     'surgeon_exp_teaching': 0.30,
     'crp_high': 0.50,
     'hemoglobin_low': 0.45,
     'wbc_abnormal': 0.30,
-    'sex_male': 0.25, # Male pelvis is narrower, often higher AL risk
-    'indication_high_risk': 0.30, # Ischemia, Tumor, IBD
-    'operation_high_risk': 0.35, # e.g., Total colectomy, Hartmann
+    'sex_male': 0.60,               # Increased from 0.25 (OR ~ 1.8)
+    'indication_high_risk': 0.50,   # Increased from 0.30 (OR ~ 1.6)
+    'operation_high_risk': 0.65,    # Increased from 0.35 (OR ~ 1.9)
     'anast_technique_hand': 0.15,
     'anast_config_end_to_end': 0.10,
-    'nutr_status_high': 0.25 # Malnutrition risk
+    'nutr_status_high': 0.35        # Increased from 0.25
 }
 
 # Make a dictionary of categorical features
@@ -869,14 +869,14 @@ if selected == 'Prediction':
     st.sidebar.title("Patient Info")
     st.sidebar.subheader("Please choose parameters")
     
-    # MODIFICATION: Added a "Not Available" checkbox for each input.
+    # Added a "Not Available" checkbox for each input.
     # The value will be set to -1 if the box is checked.
     
     # Sidebar layout
     st.sidebar.title("Patient Info")
     st.sidebar.subheader("Please choose parameters")
     
-    # MODIFICATION: Moved "Not Available" checkbox below each input feature
+    # Moved "Not Available" checkbox below each input feature
     # The value will be set to -1 if the box is checked.
     
     # Sidebar layout
