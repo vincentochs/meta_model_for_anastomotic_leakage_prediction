@@ -48,48 +48,52 @@ PATH_SINGLE_MODEL_3 = r'models/Model_3_App.pkl'
 PATH_SINGLE_MODEL_4 = r'models/Model_4_App.pkl'
 
 # --- Calibration Parameters ---
-CLINICAL_BASELINE_PROB = 0.065  # The real-world average AL rate (6.5%)
+CLINICAL_BASELINE_PROB = 0.035  # The real-world average AL rate (6.5%)
 MODEL_RAW_AVERAGE_PROB = 0.0001
 
 # Risk thresholds
 RISK_THRESHOLDS = {
     'age_high': 70,
     'age_low': 30,
-    'bmi_high': 30,  # Lowered from 35 (Clinical obesity Class I is where risk significantly rises)
+    'bmi_high': 30,         # Represents Obesity
     'bmi_low': 18.5,
-    'albumin_low': 3.5,
+    'albumin_low': 3.0,     # Lowered to match client request (< 3.0)
+    'albumin_good': 3.5,    # NEW: Threshold for protective albumin (> 3.5)
     'cci_high': 3,
     'asa_high': 3,
     'crp_high': 10.0,
     'hgb_low': 10.0,
     'wbc_high': 11.0,
     'wbc_low': 4.0,
-    'nrs_high': 3 # Nutritional Risk Screening
+    'nrs_high': 3 
 }
 
-# Log-Odds Adjustments (Positive values strictly increase probability)
+# Log-Odds Adjustments (Calibrated to ~3.5% baseline)
 LOG_ODDS_MULTIPLIERS = {
-    'age_high': 0.40,               # OR ~ 1.5
+    'age_high': 0.40,               
     'age_low': -0.20,
-    'bmi_extreme': 0.55,            # Increased from 0.35 (OR ~ 1.7)
-    'albumin_low': 0.85,            # Increased from 0.50 (OR ~ 2.3)
-    'cci_high': 0.25,               # Per point over threshold
-    'asa_high': 0.40,               # Increased from 0.30 (OR ~ 1.5 per point)
-    'smoking': 0.55,                # Increased from 0.40 (OR ~ 1.7)
-    'neoadj_therapy': 0.65,         # Increased from 0.35 (OR ~ 1.9)
-    'prior_surgery': 0.35,          
-    'emergency_surgery': 0.80,      # Increased from 0.45 (OR ~ 2.2)
+    'bmi_extreme': 0.60,            # +2-5% (Obesity)
+    'albumin_low': 1.20,            # +5-15%
+    'albumin_good': -0.95,          # Significant decrease
+    'cci_high': 0.25,               
+    'asa_high': 0.40,               
+    'smoking': 0.75,                # +2-4%
+    'neoadj_therapy': 0.90,         # +3-7%
+    'prior_surgery': 0.50,          
+    'emergency_surgery': 1.70,      # +10-20%
     'approach_open': 0.40,
+    'approach_laparoscopic': -0.95, # ~2-4% decrease
     'surgeon_exp_teaching': 0.30,
-    'crp_high': 0.50,
+    'surgeon_exp_consultant': -1.10,# ~2-5% decrease (Experienced Surgeon)
+    'crp_high': 0.85,               # +3-10%
     'hemoglobin_low': 0.45,
     'wbc_abnormal': 0.30,
-    'sex_male': 0.60,               # Increased from 0.25 (OR ~ 1.8)
-    'indication_high_risk': 0.50,   # Increased from 0.30 (OR ~ 1.6)
-    'operation_high_risk': 0.65,    # Increased from 0.35 (OR ~ 1.9)
+    'sex_male': 0.70,               # +2-5%
+    'indication_high_risk': 0.50,   
+    'operation_high_risk': 0.65,    
     'anast_technique_hand': 0.15,
     'anast_config_end_to_end': 0.10,
-    'nutr_status_high': 0.35        # Increased from 0.25
+    'nutr_status_high': 0.35        
 }
 
 # Make a dictionary of categorical features
@@ -507,16 +511,27 @@ def parser_input(model_1, model_2, model_3, model_4, meta_model, dataframe_input
     prob_history = []    # Tracks (Feature, Cumulative Probability)
 
     # 1. Calculate Calibration Shift
+    CLINICAL_MIN_PROB = 0.020  # Absolute floor (2.0%) for a perfectly healthy patient
+
     target_log_odds = np.log(CLINICAL_BASELINE_PROB / (1 - CLINICAL_BASELINE_PROB))
     model_avg_log_odds = np.log(MODEL_RAW_AVERAGE_PROB / (1 - MODEL_RAW_AVERAGE_PROB))
     calibration_shift = target_log_odds - model_avg_log_odds
 
-    y_pred_proba_clipped = np.clip(y_pred_proba, 1e-5, 1 - 1e-5)
+    # Safely convert to float to prevent array broadcasting issues
+    y_pred_proba_clipped = float(np.clip(y_pred_proba, 1e-5, 1 - 1e-5))
     current_log_odds = np.log(y_pred_proba_clipped / (1 - y_pred_proba_clipped))
     
-    # Apply Shift and record Baseline
+    # Apply Shift
     current_log_odds += calibration_shift
-    adjustments_log.append(('Model Calibration Shift', calibration_shift))
+    
+    # Prevent the ML model from dragging the starting probability into the 0.X% range
+    min_log_odds = np.log(CLINICAL_MIN_PROB / (1 - CLINICAL_MIN_PROB))
+    
+    if current_log_odds < min_log_odds:
+        current_log_odds = min_log_odds
+        adjustments_log.append(('Model Shift + Clinical Floor', calibration_shift))
+    else:
+        adjustments_log.append(('Model Calibration Shift', calibration_shift))
     
     base_prob = 1 / (1 + np.exp(-current_log_odds))
     prob_history.append(('Calibrated Baseline', base_prob))
@@ -556,8 +571,11 @@ def parser_input(model_1, model_2, model_3, model_4, meta_model, dataframe_input
 
     # Albumin
     alb_val = dataframe_input['alb_lvl'].values[0]
-    if alb_val != -1 and alb_val < RISK_THRESHOLDS['albumin_low']:
-        apply_adjustment('Low Albumin', LOG_ODDS_MULTIPLIERS['albumin_low'])
+    if alb_val != -1:
+        if alb_val < RISK_THRESHOLDS['albumin_low']:
+            apply_adjustment('Low Albumin (< 3.0)', LOG_ODDS_MULTIPLIERS['albumin_low'])
+        elif alb_val > RISK_THRESHOLDS['albumin_good']:
+            apply_adjustment('Good Albumin (> 3.5)', LOG_ODDS_MULTIPLIERS['albumin_good'])
 
     # CRP Level
     crp_val = dataframe_input['crp_lvl'].values[0]
@@ -591,10 +609,13 @@ def parser_input(model_1, model_2, model_3, model_4, meta_model, dataframe_input
     if op_val in [7, 9]:
         apply_adjustment('High Risk Operation', LOG_ODDS_MULTIPLIERS['operation_high_risk'])
 
-    # Approach (Open=3, Conversion to open=4)
+    # Approach (Open=3, Conversion to open=4, Laparoscopic=1)
     approach_val = int(dataframe_input['approach'].values[0])
-    if approach_val != -1 and approach_val in [3, 4]: 
-        apply_adjustment('Open Approach', LOG_ODDS_MULTIPLIERS['approach_open'])
+    if approach_val != -1:
+        if approach_val in [3, 4]: 
+            apply_adjustment('Open Approach', LOG_ODDS_MULTIPLIERS['approach_open'])
+        elif approach_val == 1:
+            apply_adjustment('Laparoscopic Approach', LOG_ODDS_MULTIPLIERS['approach_laparoscopic'])
 
     # Anastomotic Technique (Hand-sewn = 2)
     tech_val = dataframe_input['anast_technique'].values[0]
@@ -606,10 +627,13 @@ def parser_input(model_1, model_2, model_3, model_4, meta_model, dataframe_input
     if config_val == 1:
         apply_adjustment('End-to-End Config', LOG_ODDS_MULTIPLIERS['anast_config_end_to_end'])
 
-    # Surgeon experience (Teaching operation = 2)
+    # Surgeon experience (Teaching operation = 2, Consultant/Experienced = 1)
     surgeon_exp_val = dataframe_input['surgeon_exp'].values[0]
-    if surgeon_exp_val != -1 and surgeon_exp_val >= 2:
-        apply_adjustment('Teaching Operation', LOG_ODDS_MULTIPLIERS['surgeon_exp_teaching'])
+    if surgeon_exp_val != -1:
+        if surgeon_exp_val >= 2:
+            apply_adjustment('Teaching Operation', LOG_ODDS_MULTIPLIERS['surgeon_exp_teaching'])
+        elif surgeon_exp_val == 1:
+            apply_adjustment('Experienced Surgeon', LOG_ODDS_MULTIPLIERS['surgeon_exp_consultant'])
 
     # Nutritional Risk Screening
     nrs_val = dataframe_input['nutr_status_pts'].values[0]
