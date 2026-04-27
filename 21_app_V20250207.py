@@ -742,8 +742,8 @@ model_1 , model_2 , model_3 , model_4 , meta_model = initialize_app()
 with st.sidebar:
     selected = option_menu(
         menu_title = 'Main Menu',
-        options = ['Home' , 'Prediction'],
-        icons = ['house' , 'book'],
+        options = ['Home' , 'Prediction' , 'Examples'],
+        icons = ['house' , 'book' , 'book'],
         menu_icon = 'cast',
         default_index = 0,
         orientation = 'Vertical')
@@ -1194,3 +1194,179 @@ if selected == 'Prediction':
         carousel(items=valid_logos, width=0.70 , container_height = 400)
     else:
         st.warning("Could not find sponsor images. Please ensure the 'images' directory is present.")
+###############################################################################
+if selected == 'Examples':
+    def calculate_batch_probabilities(model_1, model_2, model_3, model_4, meta_model, df_batch):
+        """Headless function to calculate probabilities for a table of patients without triggering UI"""
+        results = []
+        
+        # Iterate through each patient row
+        for index, row in df_batch.iterrows():
+            # Create single-row dataframe for processing and force index to 0
+            single_df = pd.DataFrame([row]).reset_index(drop=True)
+            
+            # 1. Map Categorical Features
+            for col_name in dictionary_categorical_features.keys():
+                if col_name in single_df.columns:
+                    val = single_df.at[0, col_name]
+                    if isinstance(val, str) and val in dictionary_categorical_features[col_name]:
+                        single_df.at[0, col_name] = dictionary_categorical_features[col_name][val]
+            
+            # 2. Meta Model Prediction
+            columns_input = model_1.feature_names_in_.tolist()
+            
+            X = pd.DataFrame({
+                'Model_1': model_1.predict_proba(single_df[columns_input])[:, 1],
+                'Model_2': model_2.predict_proba(single_df[columns_input])[:, 1],
+                'Model_3': model_3.predict_proba(single_df[columns_input])[:, 1],
+                'Model_4': model_4.predict_proba(single_df[columns_input])[:, 1]
+            })
+            X = pd.concat([X.reset_index(drop=True),
+                           pd.DataFrame(model_1[:-2].transform(single_df[columns_input]), 
+                                        columns=model_1[:-2].get_feature_names_out().tolist())], axis=1)
+            
+            y_pred_proba = predict_with_attention_model(meta_model, X) # Extract scalar
+            
+            # 3. Apply Calibration & Floor
+            CLINICAL_MIN_PROB = 0.020 
+            target_log_odds = np.log(CLINICAL_BASELINE_PROB / (1 - CLINICAL_BASELINE_PROB))
+            model_avg_log_odds = np.log(MODEL_RAW_AVERAGE_PROB / (1 - MODEL_RAW_AVERAGE_PROB))
+            calibration_shift = target_log_odds - model_avg_log_odds
+            
+            y_pred_proba_clipped = float(np.clip(y_pred_proba, 1e-5, 1 - 1e-5))
+            current_log_odds = np.log(y_pred_proba_clipped / (1 - y_pred_proba_clipped)) + calibration_shift
+            
+            min_log_odds = np.log(CLINICAL_MIN_PROB / (1 - CLINICAL_MIN_PROB))
+            if current_log_odds < min_log_odds:
+                current_log_odds = min_log_odds
+    
+            # 4. Apply Adjustments (Using the dictionaries we defined earlier)
+            # Helper for inline adjustment
+            def get_adj(val, threshold, multiplier_key, condition='>'):
+                if val == -1: return 0
+                if condition == '>' and val > threshold: return LOG_ODDS_MULTIPLIERS[multiplier_key]
+                if condition == '<' and val < threshold: return LOG_ODDS_MULTIPLIERS[multiplier_key]
+                if condition == '>=' and val >= threshold: return LOG_ODDS_MULTIPLIERS[multiplier_key]
+                if condition == '==' and val == threshold: return LOG_ODDS_MULTIPLIERS[multiplier_key]
+                return 0
+    
+            # Apply standard modifiers
+            current_log_odds += get_adj(single_df['age'].values[0], RISK_THRESHOLDS['age_high'], 'age_high', '>')
+            current_log_odds += get_adj(single_df['age'].values[0], RISK_THRESHOLDS['age_low'], 'age_low', '<')
+            
+            bmi = single_df['bmi'].values[0]
+            if bmi != -1 and (bmi < RISK_THRESHOLDS['bmi_low'] or bmi > RISK_THRESHOLDS['bmi_high']):
+                current_log_odds += LOG_ODDS_MULTIPLIERS['bmi_extreme']
+                
+            current_log_odds += get_adj(single_df['hgb_lvl'].values[0], RISK_THRESHOLDS['hgb_low'], 'hemoglobin_low', '<')
+            
+            wbc = single_df['wbc_count'].values[0]
+            if wbc != -1 and (wbc < RISK_THRESHOLDS['wbc_low'] or wbc > RISK_THRESHOLDS['wbc_high']):
+                current_log_odds += LOG_ODDS_MULTIPLIERS['wbc_abnormal']
+                
+            alb = single_df['alb_lvl'].values[0]
+            if alb != -1:
+                if alb < RISK_THRESHOLDS['albumin_low']: current_log_odds += LOG_ODDS_MULTIPLIERS['albumin_low']
+                elif alb > RISK_THRESHOLDS['albumin_good']: current_log_odds += LOG_ODDS_MULTIPLIERS['albumin_good']
+    
+            current_log_odds += get_adj(single_df['crp_lvl'].values[0], RISK_THRESHOLDS['crp_high'], 'crp_high', '>=')
+            current_log_odds += get_adj(single_df['sex'].values[0], 2, 'sex_male', '==')
+            
+            cci = single_df['charlson_index'].values[0]
+            if cci != -1 and cci > RISK_THRESHOLDS['cci_high']:
+                current_log_odds += LOG_ODDS_MULTIPLIERS['cci_high'] * (cci - RISK_THRESHOLDS['cci_high'])
+    
+            asa = single_df['asa_score'].values[0]
+            if asa != -1 and asa >= RISK_THRESHOLDS['asa_high']:
+                current_log_odds += LOG_ODDS_MULTIPLIERS['asa_high'] * ((asa - RISK_THRESHOLDS['asa_high']) + 1)
+    
+            ind = single_df['indication'].values[0]
+            if ind in [4, 5, 7]: current_log_odds += LOG_ODDS_MULTIPLIERS['indication_high_risk']
+            
+            op = single_df['operation'].values[0]
+            if op in [7, 9]: current_log_odds += LOG_ODDS_MULTIPLIERS['operation_high_risk']
+            
+            appr = single_df['approach'].values[0]
+            if appr in [3, 4]: current_log_odds += LOG_ODDS_MULTIPLIERS['approach_open']
+            elif appr == 1: current_log_odds += LOG_ODDS_MULTIPLIERS['approach_laparoscopic']
+    
+            current_log_odds += get_adj(single_df['anast_technique'].values[0], 2, 'anast_technique_hand', '==')
+            current_log_odds += get_adj(single_df['anast_config'].values[0], 1, 'anast_config_end_to_end', '==')
+            
+            surg_exp = single_df['surgeon_exp'].values[0]
+            if surg_exp >= 2: current_log_odds += LOG_ODDS_MULTIPLIERS['surgeon_exp_teaching']
+            elif surg_exp == 1: current_log_odds += LOG_ODDS_MULTIPLIERS['surgeon_exp_consultant']
+    
+            nrs = single_df['nutr_status_pts'].values[0]
+            if nrs != -1 and nrs >= RISK_THRESHOLDS['nrs_high']:
+                current_log_odds += LOG_ODDS_MULTIPLIERS['nutr_status_high'] * ((nrs - RISK_THRESHOLDS['nrs_high']) + 1)
+    
+            current_log_odds += get_adj(single_df['smoking'].values[0], 1, 'smoking', '>=')
+            current_log_odds += get_adj(single_df['neoadj_therapy'].values[0], 1, 'neoadj_therapy', '>=')
+            current_log_odds += get_adj(single_df['prior_surgery'].values[0], 2, 'prior_surgery', '>=')
+            current_log_odds += get_adj(single_df['emerg_surg'].values[0], 1, 'emergency_surgery', '>=')
+    
+            # Calculate final probability
+            final_prob = 1 / (1 + np.exp(-current_log_odds))
+            results.append(final_prob)
+            
+        return results
+    
+    import io
+
+    st.markdown("---")
+    st.subheader("📊 Model Validation: 20 Clinical Scenarios")
+    st.write("Review how the model scales from perfectly healthy patients to complex, critical emergency cases.")
+    
+    # Raw CSV data for the 20 test cases
+    csv_data = """Case Tier,age,bmi,alb_lvl,sex,approach,emerg_surg,surgeon_exp,smoking,asa_score,hgb_lvl,wbc_count,crp_lvl,charlson_index,prior_surgery,indication,operation,anast_type,anast_technique,anast_config,nutr_status_pts,neoadj_therapy
+    Low Risk (Ideal),32,22.0,4.2,Female,1: Laparoscopic,No,Consultant,No,1: Healthy Person,14.5,6.5,2.0,0,No,Diverticulitis,Sigmoid resection,Colon Anastomosis,1: Stapler,End to End,0,No
+    Low Risk,45,24.5,4.0,Female,1: Laparoscopic,No,Consultant,No,1: Healthy Person,13.8,7.0,3.5,0,No,Diverticulitis,Sigmoid resection,Colon Anastomosis,1: Stapler,End to End,0,No
+    Low Risk,28,21.0,4.5,Male,1: Laparoscopic,No,Consultant,No,1: Healthy Person,15.2,5.5,1.0,0,No,Tumor,Right hemicolectomy,Colon Anastomosis,1: Stapler,End to End,0,No
+    Low Risk,52,26.0,3.8,Female,1: Laparoscopic,No,Consultant,No,2: Mild Systemic disease,12.5,8.0,4.0,1,No,Diverticulitis,Sigmoid resection,Colon Anastomosis,1: Stapler,End to End,0,No
+    Low Risk,39,23.5,4.1,Male,1: Laparoscopic,No,Consultant,Yes,1: Healthy Person,14.0,7.2,5.0,0,No,Tumor,Right hemicolectomy,Colon Anastomosis,1: Stapler,End to End,0,No
+    Moderate Risk,65,28.0,3.6,Female,1: Laparoscopic,No,Consultant,No,2: Mild Systemic disease,11.5,9.0,8.0,1,Yes,Diverticulitis,Sigmoid resection,Colon Anastomosis,1: Stapler,End to End,1,No
+    Moderate Risk,58,29.5,3.5,Male,1: Laparoscopic,No,Consultant,No,2: Mild Systemic disease,12.0,8.5,9.5,2,No,Tumor,Left Hemicolectomy,Colon Anastomosis,1: Stapler,End to End,1,No
+    Moderate Risk,71,27.0,3.4,Female,3: Open,No,Consultant,No,2: Mild Systemic disease,10.8,9.5,11.0,2,Yes,Tumor,Transverse colectomy,Colon Anastomosis,1: Stapler,End to End,2,No
+    Moderate Risk,62,31.0,3.7,Male,1: Laparoscopic,No,Teaching Operation,No,2: Mild Systemic disease,13.0,7.5,6.0,1,No,Diverticulitis,Sigmoid resection,Colon Anastomosis,2: Hand-sewn,End to End,1,No
+    Moderate Risk,55,25.5,3.6,Male,3: Open,No,Consultant,Yes,2: Mild Systemic disease,13.5,8.0,7.5,1,No,Tumor,Right hemicolectomy,Colon Anastomosis,1: Stapler,End to End,0,Yes
+    High Risk,75,32.5,2.9,Male,3: Open,No,Consultant,No,3: Severe Systemic disease,9.8,11.5,15.0,3,No,Tumor,Total colectomy,Colon Anastomosis,2: Hand-sewn,End to End,3,Yes
+    High Risk,68,34.0,3.1,Female,3: Open,Yes,Consultant,No,3: Severe Systemic disease,10.2,12.0,18.0,2,No,Ischemia,Left Hemicolectomy,Colon Anastomosis,1: Stapler,End to End,2,No
+    High Risk,80,28.5,2.8,Male,1: Laparoscopic,No,Teaching Operation,Yes,3: Severe Systemic disease,9.5,10.5,14.0,4,Yes,Tumor,Right hemicolectomy,Colon Anastomosis,1: Stapler,End to End,3,Yes
+    High Risk,64,36.0,3.2,Male,3: Open,No,Consultant,Yes,3: Severe Systemic disease,11.0,12.5,22.0,3,No,Diverticulitis,Sigmoid resection,Colon Anastomosis,2: Hand-sewn,End to End,2,No
+    High Risk,72,29.0,2.7,Female,4: Conversion to open,No,Consultant,No,3: Severe Systemic disease,9.0,13.0,25.0,3,Yes,Tumor,Total colectomy,Colon Anastomosis,1: Stapler,End to End,4,Yes
+    Very High Risk,82,31.0,2.4,Male,3: Open,Yes,Consultant,No,4: Severe Systemic disease that is a constant threat to life,8.5,15.0,45.0,5,No,Ischemia,Total colectomy,Colon Anastomosis,2: Hand-sewn,End to End,5,No
+    Very High Risk,77,35.0,2.2,Male,3: Open,Yes,Teaching Operation,Yes,4: Severe Systemic disease that is a constant threat to life,8.0,16.5,50.0,4,Yes,Tumor,Left Hemicolectomy,Colon Anastomosis,2: Hand-sewn,End to End,4,Yes
+    Very High Risk,85,26.0,2.1,Female,3: Open,Yes,Consultant,No,4: Severe Systemic disease that is a constant threat to life,7.5,18.0,60.0,6,No,Ischemia,Total colectomy,Colon Anastomosis,1: Stapler,End to End,6,No
+    Very High Risk,69,38.0,2.5,Male,4: Conversion to open,Yes,Teaching Operation,Yes,4: Severe Systemic disease that is a constant threat to life,9.2,14.0,40.0,3,Yes,Diverticulitis,Hartmann conversion,Colon Anastomosis,2: Hand-sewn,End to End,5,No
+    Critical Risk,88,24.0,1.9,Male,3: Open,Yes,Teaching Operation,Yes,5: Moribund person,6.5,22.0,85.0,7,Yes,Ischemia,Total colectomy,Colon Anastomosis,2: Hand-sewn,End to End,6,Yes
+    """
+    
+    if st.button("Run Batch Analysis on 20 Clinical Cases", type="primary"):
+        with st.spinner("Processing 20 patients through meta-model..."):
+            # 1. Load Data
+            df_demo = pd.read_csv(io.StringIO(csv_data))
+            
+            # 2. Extract inputs for the model (drop the label column)
+            df_inputs = df_demo.drop(columns=['Case Tier'])
+            
+            # 3. Calculate Probabilities using the headless function
+            probs = calculate_batch_probabilities(model_1, model_2, model_3, model_4, meta_model, df_inputs)
+            
+            # 4. Format the final output table
+            df_display = df_demo[['Case Tier', 'age', 'sex', 'bmi', 'alb_lvl', 'approach', 'emerg_surg', 'surgeon_exp']].copy()
+            
+            # Format probability as a percentage string for display, but keep the float for styling
+            df_display['AL Probability %'] = [p * 100 for p in probs]
+            
+            # 5. Display beautifully colored table
+            st.dataframe(
+                df_display.style.background_gradient(
+                    subset=['AL Probability %'], 
+                    cmap='RdYlGn_r', # Red-Yellow-Green reversed (Red is bad/high prob)
+                    vmin=0, 
+                    vmax=25
+                ).format({'AL Probability %': "{:.2f}%"}),
+                use_container_width=True,
+                height=750
+            )
