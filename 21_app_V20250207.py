@@ -1369,7 +1369,7 @@ if selected == 'Examples':
                 ).format({'AL Probability %': "{:.2f}%"}),
                 use_container_width=True,
                 height=750
-            )import joblib
+            )
 
 # Format of numbers
 print('Libraries loaded')
