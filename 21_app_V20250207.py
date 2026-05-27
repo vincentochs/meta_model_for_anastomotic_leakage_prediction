@@ -74,17 +74,17 @@ RISK_THRESHOLDS = {
 
 # Log-Odds Adjustments (Calibrated for strict linear threshold mapping)
 LOG_ODDS_MULTIPLIERS = {
-    'age_high': 0.40,               
+    'age_high': 0.10,               
     'age_low': -0.20,
-    'bmi_extreme': 0.60,            
-    'albumin_low': 1.20,            
+    'bmi_extreme': 0.50,            
+    'albumin_low': 0.05,            
     'albumin_good': -0.95,          
-    'cci_extreme': 0.70,            # Flat bump to push into Extreme >30% territory
+    'cci_extreme': 0.67,            # Flat bump to push into Extreme >30% territory
     'cci_severe': 0.40,             # Flat bump for Very High 20-30%
     'cci_high': 0.25,               # Flat bump for High 10-20%
     'cci_moderate': 0.05,           # Flat bump for Moderate 5-10%
     'cci_low': 0.00,                # Baseline <5%
-    'asa_high': 0.25,               
+    'asa_high': 0.65,               
     'smoking': 0.60,                
     'neoadj_therapy': 0.80,         
     'prior_surgery': 0.50,          
@@ -94,9 +94,9 @@ LOG_ODDS_MULTIPLIERS = {
     'surgeon_exp_teaching': 0.20,
     'surgeon_exp_consultant': -1.00,
     'crp_high': 0.80,               
-    'hemoglobin_low': 0.40,
-    'wbc_abnormal': 0.30,
-    'sex_male': 0.50,               
+    'hemoglobin_low': 0.10,
+    'wbc_abnormal': 0.10,
+    'sex_male': 0.20,               
     'indication_high_risk': 0.50,   
     'operation_high_risk': 0.60,    
     'anast_technique_hand': 0.20,
@@ -106,16 +106,16 @@ LOG_ODDS_MULTIPLIERS = {
 
 # Update odds by point
 LOG_ODDS_MULTIPLIERS.update({
-    'cci_incremental_per_point': 0.45,  # Penalty for each point above the tier's minimum
+    'cci_incremental_per_point': 0.40,  # Penalty for each point above the tier's minimum
     'asa_incremental_per_point': 0.45,  # Penalty for each point above ASA 3
     'nrs_incremental_per_point': 0.05,  # Penalty for each point above NRS 3
 })
 LOG_ODDS_MULTIPLIERS.update({
     # Continuous variable increments
-    'age_incremental_per_year': 0.03,      # Penalty for every year above 70
-    'bmi_incremental_per_point': 0.05,     # Penalty for every BMI point above 30
-    'albumin_incremental_per_0_1': 0.08,   # Penalty for every 0.1 g/dL drop below 3.0
-    'hgb_incremental_per_point': 0.15,     # Penalty for every 1.0 g/dL drop below 10.0
+    'age_incremental_per_year': 0.01,      # Penalty for every year above 70
+    'bmi_incremental_per_point': 0.01,     # Penalty for every BMI point above 30
+    'albumin_incremental_per_0_1': 0.005,   # Penalty for every 0.1 g/dL drop below 3.0
+    'hgb_incremental_per_point': 0.005,     # Penalty for every 1.0 g/dL drop below 10.0
     'wbc_incremental_per_point': 0.05,     # Penalty for every 1.0 outside the 4-11 range
 })
 
@@ -722,68 +722,68 @@ def parser_input(dataframe_input):
     )
     
     # 4. Render the Probability Trajectory Plot (For Customers)
-    # if len(prob_history) > 1:
-    #     st.subheader("Probability Evolution")
-    #     st.write("This chart shows how specific risk factors combined to reach the final probability estimate.")
+    if len(prob_history) > 1:
+        st.subheader("Probability Evolution")
+        st.write("This chart shows how specific risk factors combined to reach the final probability estimate.")
         
-    #     steps = [item[0] for item in prob_history]
-    #     probs = [item[1] * 100 for item in prob_history] # Convert to percentage
+        steps = [item[0] for item in prob_history]
+        probs = [item[1] * 100 for item in prob_history] # Convert to percentage
         
-    #     fig2, ax2 = plt.subplots(figsize=(10, 5))
+        fig2, ax2 = plt.subplots(figsize=(10, 5))
         
-    #     # Plot line and markers
-    #     ax2.plot(steps, probs, marker='o', linestyle='-', color='#1f77b4', markersize=8, linewidth=2)
+        # Plot line and markers
+        ax2.plot(steps, probs, marker='o', linestyle='-', color='#1f77b4', markersize=8, linewidth=2)
         
-    #     # Formatting
-    #     ax2.set_ylabel('AL Probability (%)', fontsize=12)
-    #     ax2.set_ylim(0, max(probs) + min(100 - max(probs), 15)) # Give headroom, max 100%
+        # Formatting
+        ax2.set_ylabel('AL Probability (%)', fontsize=12)
+        ax2.set_ylim(0, max(probs) + min(100 - max(probs), 15)) # Give headroom, max 100%
         
-    #     # Rotate x-axis labels to prevent overlap
-    #     plt.xticks(rotation=45, ha='right', fontsize=10)
-    #     ax2.grid(True, linestyle='--', alpha=0.5)
+        # Rotate x-axis labels to prevent overlap
+        plt.xticks(rotation=45, ha='right', fontsize=10)
+        ax2.grid(True, linestyle='--', alpha=0.5)
         
-    #     # Annotate each point with the exact percentage
-    #     for i, (txt, p) in enumerate(zip(steps, probs)):
-    #         ax2.annotate(f"{p:.1f}%", (i, p), textcoords="offset points", xytext=(0,10), 
-    #                      ha='center', fontsize=9, fontweight='bold')
+        # Annotate each point with the exact percentage
+        for i, (txt, p) in enumerate(zip(steps, probs)):
+            ax2.annotate(f"{p:.1f}%", (i, p), textcoords="offset points", xytext=(0,10), 
+                         ha='center', fontsize=9, fontweight='bold')
             
-    #     ax2.spines['top'].set_visible(False)
-    #     ax2.spines['right'].set_visible(False)
+        ax2.spines['top'].set_visible(False)
+        ax2.spines['right'].set_visible(False)
         
-    #     plt.tight_layout()
-    #     st.pyplot(fig2)
+        plt.tight_layout()
+        st.pyplot(fig2)
 
     # 5. Render the Explainer Plot (Log-Odds / Technical Audit)
-    # if len(adjustments_log) > 0:
-    #     with st.expander("Technical View: Log-Odds Risk Adjustments"):
-    #         # Exclude the baseline from the bar chart to focus purely on the deltas
-    #         labels = [item[0] for item in adjustments_log[1:]]
-    #         values = [item[1] for item in adjustments_log[1:]]
+    if len(adjustments_log) > 0:
+        with st.expander("Technical View: Log-Odds Risk Adjustments"):
+            # Exclude the baseline from the bar chart to focus purely on the deltas
+            labels = [item[0] for item in adjustments_log[1:]]
+            values = [item[1] for item in adjustments_log[1:]]
             
-    #         colors = ['salmon' if val > 0 else 'lightgreen' for val in values]
+            colors = ['salmon' if val > 0 else 'lightgreen' for val in values]
             
-    #         # Avoid empty plot error if no adjustments triggered
-    #         if len(labels) > 0:
-    #             fig, ax = plt.subplots(figsize=(8, max(4, len(labels) * 0.4)))
-    #             ax.barh(labels, values, color=colors, edgecolor='black', alpha=0.8)
+            # Avoid empty plot error if no adjustments triggered
+            if len(labels) > 0:
+                fig, ax = plt.subplots(figsize=(8, max(4, len(labels) * 0.4)))
+                ax.barh(labels, values, color=colors, edgecolor='black', alpha=0.8)
                 
-    #             ax.axvline(0, color='black', linewidth=1)
-    #             ax.set_xlabel('Impact on Risk (Log-Odds)')
-    #             ax.invert_yaxis()
-    #             ax.grid(axis='x', linestyle='--', alpha=0.6)
+                ax.axvline(0, color='black', linewidth=1)
+                ax.set_xlabel('Impact on Risk (Log-Odds)')
+                ax.invert_yaxis()
+                ax.grid(axis='x', linestyle='--', alpha=0.6)
                 
-    #             for i, v in enumerate(values):
-    #                 ha = 'left' if v > 0 else 'right'
-    #                 offset = 0.01 if v > 0 else -0.01
-    #                 ax.text(v + offset, i, f"{v:+.2f}", va='center', ha=ha, fontsize=10)
+                for i, v in enumerate(values):
+                    ha = 'left' if v > 0 else 'right'
+                    offset = 0.01 if v > 0 else -0.01
+                    ax.text(v + offset, i, f"{v:+.2f}", va='center', ha=ha, fontsize=10)
                     
-    #             ax.spines['top'].set_visible(False)
-    #             ax.spines['right'].set_visible(False)
+                ax.spines['top'].set_visible(False)
+                ax.spines['right'].set_visible(False)
                 
-    #             plt.tight_layout()
-    #             st.pyplot(fig)
-    #         else:
-    #             st.write("No clinical risk adjustments were triggered beyond the population baseline.")
+                plt.tight_layout()
+                st.pyplot(fig)
+            else:
+                st.write("No clinical risk adjustments were triggered beyond the population baseline.")
     
     return None
 
