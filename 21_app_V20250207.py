@@ -106,8 +106,8 @@ LOG_ODDS_MULTIPLIERS = {
 
 # Update odds by point
 LOG_ODDS_MULTIPLIERS.update({
-    'cci_incremental_per_point': 0.05,  # Penalty for each point above the tier's minimum
-    'asa_incremental_per_point': 0.05,  # Penalty for each point above ASA 3
+    'cci_incremental_per_point': 0.45,  # Penalty for each point above the tier's minimum
+    'asa_incremental_per_point': 0.45,  # Penalty for each point above ASA 3
     'nrs_incremental_per_point': 0.05,  # Penalty for each point above NRS 3
 })
 LOG_ODDS_MULTIPLIERS.update({
@@ -716,7 +716,7 @@ def parser_input(dataframe_input):
     st.markdown(
         f'<div style="text-align:center;">'
         f'<p style="font-size:24px; margin-bottom:0px;">AL Likelihood: <span style="color:{color}; font-weight:bold;">{100 * final_pred_proba:.2f}%</span></p>'
-        f'<p style="font-size:20px; color:{color}; font-weight:bold; margin-top:5px;">Risk Level: {risk_level}</p>'
+        #f'<p style="font-size:20px; color:{color}; font-weight:bold; margin-top:5px;">Risk Level: {risk_level}</p>'
         f'</div>',
         unsafe_allow_html=True
     )
