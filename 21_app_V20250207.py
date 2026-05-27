@@ -55,13 +55,15 @@ MODEL_RAW_AVERAGE_PROB = 0.0001
 RISK_THRESHOLDS = {
     'age_high': 70,
     'age_low': 30,
-    'bmi_high': 30,         # Represents Obesity
+    'bmi_high': 30,         
     'bmi_low': 18.5,
-    'albumin_low': 3.0,     # Lowered to match client request (< 3.0)
-    'albumin_good': 3.5,    # NEW: Threshold for protective albumin (> 3.5)
-    'cci_high': 5,
-    'cci_medium' : 3,
-    'cci_low' : 1,
+    'albumin_low': 3.0,     
+    'albumin_good': 3.5,    
+    'cci_extreme': 10,       # Extreme comorbidity
+    'cci_severe': 7,         # Very high / severe
+    'cci_high': 5,           # High
+    'cci_moderate': 3,       # Moderate
+    'cci_low': 0,            # Low (0-2)
     'asa_high': 3,
     'crp_high': 10.0,
     'hgb_low': 10.0,
@@ -70,35 +72,52 @@ RISK_THRESHOLDS = {
     'nrs_high': 3 
 }
 
-# Log-Odds Adjustments (Calibrated to ~3.5% baseline)
+# Log-Odds Adjustments (Calibrated for strict linear threshold mapping)
 LOG_ODDS_MULTIPLIERS = {
     'age_high': 0.40,               
     'age_low': -0.20,
-    'bmi_extreme': 0.60,            # +2-5% (Obesity)
-    'albumin_low': 1.20,            # +5-15%
-    'albumin_good': -0.95,          # Significant decrease
-    'cci_high': 0.05,  
-    'cci_medium' : 0.025,
-    'cci_low' : -0.20,             
-    'asa_high': 0.075,               
-    'smoking': 0.75,                # +2-4%
-    'neoadj_therapy': 0.90,         # +3-7%
+    'bmi_extreme': 0.60,            
+    'albumin_low': 1.20,            
+    'albumin_good': -0.95,          
+    'cci_extreme': 0.70,            # Flat bump to push into Extreme >30% territory
+    'cci_severe': 0.40,             # Flat bump for Very High 20-30%
+    'cci_high': 0.25,               # Flat bump for High 10-20%
+    'cci_moderate': 0.05,           # Flat bump for Moderate 5-10%
+    'cci_low': 0.00,                # Baseline <5%
+    'asa_high': 0.25,               
+    'smoking': 0.60,                
+    'neoadj_therapy': 0.80,         
     'prior_surgery': 0.50,          
-    'emergency_surgery': 1.70,      # +10-20%
+    'emergency_surgery': 1.50,      
     'approach_open': 0.40,
-    'approach_laparoscopic': -0.95, # ~2-4% decrease
-    'surgeon_exp_teaching': 0.10,
-    'surgeon_exp_consultant': -1.10,# ~2-5% decrease (Experienced Surgeon)
-    'crp_high': 0.85,               # +3-10%
-    'hemoglobin_low': 0.45,
+    'approach_laparoscopic': -0.80, 
+    'surgeon_exp_teaching': 0.20,
+    'surgeon_exp_consultant': -1.00,
+    'crp_high': 0.80,               
+    'hemoglobin_low': 0.40,
     'wbc_abnormal': 0.30,
-    'sex_male': 0.70,               # +2-5%
+    'sex_male': 0.50,               
     'indication_high_risk': 0.50,   
-    'operation_high_risk': 0.65,    
-    'anast_technique_hand': 0.15,
+    'operation_high_risk': 0.60,    
+    'anast_technique_hand': 0.20,
     'anast_config_end_to_end': 0.10,
-    'nutr_status_high': 0.03        
+    'nutr_status_high': 0.30        
 }
+
+# Update odds by point
+LOG_ODDS_MULTIPLIERS.update({
+    'cci_incremental_per_point': 0.05,  # Penalty for each point above the tier's minimum
+    'asa_incremental_per_point': 0.05,  # Penalty for each point above ASA 3
+    'nrs_incremental_per_point': 0.05,  # Penalty for each point above NRS 3
+})
+LOG_ODDS_MULTIPLIERS.update({
+    # Continuous variable increments
+    'age_incremental_per_year': 0.03,      # Penalty for every year above 70
+    'bmi_incremental_per_point': 0.05,     # Penalty for every BMI point above 30
+    'albumin_incremental_per_0_1': 0.08,   # Penalty for every 0.1 g/dL drop below 3.0
+    'hgb_incremental_per_point': 0.15,     # Penalty for every 1.0 g/dL drop below 10.0
+    'wbc_incremental_per_point': 0.05,     # Penalty for every 1.0 outside the 4-11 range
+})
 
 # Make a dictionary of categorical features
 dictionary_categorical_features = {'sex'  : {'Male' : 2,
@@ -523,35 +542,51 @@ def parser_input(dataframe_input):
     # 2. Evaluate All Features
     
     # Age
+    # Age
     age_val = dataframe_input['age'].values[0]
-    if age_val != -1:
-        if age_val > RISK_THRESHOLDS['age_high']:
-            apply_adjustment('Age > 70', LOG_ODDS_MULTIPLIERS['age_high'])
-        elif age_val < RISK_THRESHOLDS['age_low']:
-            apply_adjustment('Age < 30', LOG_ODDS_MULTIPLIERS['age_low'])
+    if age_val >= RISK_THRESHOLDS['age_high']:
+        extra_years = age_val - RISK_THRESHOLDS['age_high']
+        bump = LOG_ODDS_MULTIPLIERS['age_high'] + (extra_years * LOG_ODDS_MULTIPLIERS['age_incremental_per_year'])
+        apply_adjustment(f'High Age ({age_val})', bump)
+    elif age_val <= RISK_THRESHOLDS['age_low']:
+        apply_adjustment(f'Low Age ({age_val})', LOG_ODDS_MULTIPLIERS['age_low'])
 
     # BMI
     bmi_val = dataframe_input['bmi'].values[0]
-    if bmi_val != -1 and (bmi_val < RISK_THRESHOLDS['bmi_low'] or bmi_val > RISK_THRESHOLDS['bmi_high']):
-        apply_adjustment('BMI Extreme', LOG_ODDS_MULTIPLIERS['bmi_extreme'])
+    if bmi_val >= RISK_THRESHOLDS['bmi_high']:
+        extra_bmi = bmi_val - RISK_THRESHOLDS['bmi_high']
+        bump = LOG_ODDS_MULTIPLIERS['bmi_extreme'] + (extra_bmi * LOG_ODDS_MULTIPLIERS['bmi_incremental_per_point'])
+        apply_adjustment(f'High BMI ({bmi_val})', bump)
 
-    # Hemoglobin Level
+    # Hemoglobin
     hgb_val = dataframe_input['hgb_lvl'].values[0]
-    if hgb_val != -1 and hgb_val < RISK_THRESHOLDS['hgb_low']:
-        apply_adjustment('Low Hemoglobin', LOG_ODDS_MULTIPLIERS['hemoglobin_low'])
+    if hgb_val != -1 and hgb_val <= RISK_THRESHOLDS['hgb_low']:
+        deficit = RISK_THRESHOLDS['hgb_low'] - hgb_val
+        bump = LOG_ODDS_MULTIPLIERS['hemoglobin_low'] + (deficit * LOG_ODDS_MULTIPLIERS['hgb_incremental_per_point'])
+        apply_adjustment(f'Low Hemoglobin ({hgb_val})', bump)
 
-    # WBC Count
     wbc_val = dataframe_input['wbc_count'].values[0]
-    if wbc_val != -1 and (wbc_val < RISK_THRESHOLDS['wbc_low'] or wbc_val > RISK_THRESHOLDS['wbc_high']):
-        apply_adjustment('Abnormal WBC', LOG_ODDS_MULTIPLIERS['wbc_abnormal'])
+    if wbc_val != -1:
+        if wbc_val >= RISK_THRESHOLDS['wbc_high']:
+            extra = wbc_val - RISK_THRESHOLDS['wbc_high']
+            bump = LOG_ODDS_MULTIPLIERS['wbc_abnormal'] + (extra * LOG_ODDS_MULTIPLIERS['wbc_incremental_per_point'])
+            apply_adjustment(f'High WBC ({wbc_val})', bump)
+            
+        elif wbc_val <= RISK_THRESHOLDS['wbc_low']:
+            deficit = RISK_THRESHOLDS['wbc_low'] - wbc_val
+            bump = LOG_ODDS_MULTIPLIERS['wbc_abnormal'] + (deficit * LOG_ODDS_MULTIPLIERS['wbc_incremental_per_point'])
+            apply_adjustment(f'Low WBC ({wbc_val})', bump)
 
-    # Albumin
+    # Albumin (calculated per 0.1 drop for finer granularity)
     alb_val = dataframe_input['alb_lvl'].values[0]
     if alb_val != -1:
-        if alb_val < RISK_THRESHOLDS['albumin_low']:
-            apply_adjustment('Low Albumin (< 3.0)', LOG_ODDS_MULTIPLIERS['albumin_low'])
-        elif alb_val > RISK_THRESHOLDS['albumin_good']:
-            apply_adjustment('Good Albumin (> 3.5)', LOG_ODDS_MULTIPLIERS['albumin_good'])
+        if alb_val <= RISK_THRESHOLDS['albumin_low']:
+            # Calculate how many 0.1 units the albumin is below the 3.0 threshold
+            deficit_units = (RISK_THRESHOLDS['albumin_low'] - alb_val) * 10
+            bump = LOG_ODDS_MULTIPLIERS['albumin_low'] + (deficit_units * LOG_ODDS_MULTIPLIERS['albumin_incremental_per_0_1'])
+            apply_adjustment(f'Low Albumin ({alb_val})', bump)
+        elif alb_val >= RISK_THRESHOLDS['albumin_good']:
+            apply_adjustment(f'Good Albumin ({alb_val})', LOG_ODDS_MULTIPLIERS['albumin_good'])
 
     # CRP Level
     crp_val = dataframe_input['crp_lvl'].values[0]
@@ -563,23 +598,39 @@ def parser_input(dataframe_input):
     if sex_val == 2:
         apply_adjustment('Sex: Male', LOG_ODDS_MULTIPLIERS['sex_male'])
 
-    # Charlson Comorbidity Index (CCI)
+   # Charlson Comorbidity Index (CCI)
     cci_val = int(dataframe_input['charlson_index'].values[0])
-    if cci_val != -1 and cci_val >= RISK_THRESHOLDS['cci_high']:
-        sev = (cci_val - RISK_THRESHOLDS['cci_high']) + 1
-        apply_adjustment(f'High CCI (+{sev})', LOG_ODDS_MULTIPLIERS['cci_high'] * sev)
-    elif cci_val != -1 and cci_val >= RISK_THRESHOLDS['cci_medium']:
-        sev = (cci_val - RISK_THRESHOLDS['cci_medium']) + 1
-        apply_adjustment(f'Medium CCI (+{sev})', LOG_ODDS_MULTIPLIERS['cci_medium'] * sev)
-    elif cci_val != -1 and cci_val <= RISK_THRESHOLDS['cci_low']:
-        sev = (-cci_val - RISK_THRESHOLDS['cci_low']) + 5
-        apply_adjustment(f'Low CCI (+{sev})', LOG_ODDS_MULTIPLIERS['cci_low'] * sev)
+    if cci_val != -1:
+        if cci_val >= RISK_THRESHOLDS['cci_extreme']:
+            extra_points = cci_val - RISK_THRESHOLDS['cci_extreme']
+            bump = LOG_ODDS_MULTIPLIERS['cci_extreme'] + (extra_points * LOG_ODDS_MULTIPLIERS['cci_incremental_per_point'])
+            apply_adjustment(f'Extreme CCI ({cci_val})', bump)
+            
+        elif cci_val >= RISK_THRESHOLDS['cci_severe']:
+            extra_points = cci_val - RISK_THRESHOLDS['cci_severe']
+            bump = LOG_ODDS_MULTIPLIERS['cci_severe'] + (extra_points * LOG_ODDS_MULTIPLIERS['cci_incremental_per_point'])
+            apply_adjustment(f'Severe CCI ({cci_val})', bump)
+            
+        elif cci_val >= RISK_THRESHOLDS['cci_high']:
+            extra_points = cci_val - RISK_THRESHOLDS['cci_high']
+            bump = LOG_ODDS_MULTIPLIERS['cci_high'] + (extra_points * LOG_ODDS_MULTIPLIERS['cci_incremental_per_point'])
+            apply_adjustment(f'High CCI ({cci_val})', bump)
+            
+        elif cci_val >= RISK_THRESHOLDS['cci_moderate']:
+            extra_points = cci_val - RISK_THRESHOLDS['cci_moderate']
+            bump = LOG_ODDS_MULTIPLIERS['cci_moderate'] + (extra_points * LOG_ODDS_MULTIPLIERS['cci_incremental_per_point'])
+            apply_adjustment(f'Moderate CCI ({cci_val})', bump)
+            
+        else:
+            # Low CCI doesn't usually carry an incremental penalty, just the baseline
+            apply_adjustment(f'Low CCI ({cci_val})', LOG_ODDS_MULTIPLIERS['cci_low'])
 
-    # ASA Score
+    # ASA Score 
     asa_val = int(dataframe_input['asa_score'].values[0])
     if asa_val != -1 and asa_val >= RISK_THRESHOLDS['asa_high']:
-        sev = (asa_val - RISK_THRESHOLDS['asa_high']) + 1
-        apply_adjustment(f'High ASA (+{sev})', LOG_ODDS_MULTIPLIERS['asa_high'] * sev)
+        extra_points = asa_val - RISK_THRESHOLDS['asa_high']
+        bump = LOG_ODDS_MULTIPLIERS['asa_high'] + (extra_points * LOG_ODDS_MULTIPLIERS['asa_incremental_per_point'])
+        apply_adjustment(f'High ASA ({asa_val})', bump)
 
     # Indication (Ischemia=4, Tumor=5, IBD=7)
     ind_val = dataframe_input['indication'].values[0]
@@ -617,11 +668,12 @@ def parser_input(dataframe_input):
         elif surgeon_exp_val == 1:
             apply_adjustment('Experienced Surgeon', LOG_ODDS_MULTIPLIERS['surgeon_exp_consultant'])
 
-    # Nutritional Risk Screening
+    # Nutritional Risk Screening (NRS)
     nrs_val = dataframe_input['nutr_status_pts'].values[0]
     if nrs_val != -1 and nrs_val >= RISK_THRESHOLDS['nrs_high']:
-        sev = (nrs_val - RISK_THRESHOLDS['nrs_high']) + 1
-        apply_adjustment(f'High NRS (+{sev})', LOG_ODDS_MULTIPLIERS['nutr_status_high'] * sev)
+        extra_points = nrs_val - RISK_THRESHOLDS['nrs_high']
+        bump = LOG_ODDS_MULTIPLIERS['nutr_status_high'] + (extra_points * LOG_ODDS_MULTIPLIERS['nrs_incremental_per_point'])
+        apply_adjustment(f'High NRS ({nrs_val})', bump)
 
     # Binary Condition Checkboxes
     smoking_val = dataframe_input['smoking'].values[0]
@@ -643,76 +695,95 @@ def parser_input(dataframe_input):
     # 3. Final Output
     final_pred_proba = 1 / (1 + np.exp(-current_log_odds))
     
+    # Evaluate risk tier and assign colors based on hard thresholds
+    if final_pred_proba > 0.30:
+        risk_level = "Extreme / exceptional (>30%)"
+        color = "darkred"
+    elif final_pred_proba > 0.20:
+        risk_level = "Very high (20-30%)"
+        color = "red"
+    elif final_pred_proba > 0.10:
+        risk_level = "High (10-20%)"
+        color = "darkorange"
+    elif final_pred_proba > 0.05:
+        risk_level = "Moderate (5-10%)"
+        color = "orange"
+    else:
+        risk_level = "Low (<5%)"
+        color = "green"
+
     st.markdown("---")
     st.markdown(
-        f'<p style="font-size:24px; text-align:center;"> '
-        f'AL Likelihood: <span style="color:red; font-weight:bold;">{100 * final_pred_proba:.2f}%</span></p>',
+        f'<div style="text-align:center;">'
+        f'<p style="font-size:24px; margin-bottom:0px;">AL Likelihood: <span style="color:{color}; font-weight:bold;">{100 * final_pred_proba:.2f}%</span></p>'
+        f'<p style="font-size:20px; color:{color}; font-weight:bold; margin-top:5px;">Risk Level: {risk_level}</p>'
+        f'</div>',
         unsafe_allow_html=True
     )
     
     # 4. Render the Probability Trajectory Plot (For Customers)
-    if len(prob_history) > 1:
-        st.subheader("Probability Evolution")
-        st.write("This chart shows how specific risk factors combined to reach the final probability estimate.")
+    # if len(prob_history) > 1:
+    #     st.subheader("Probability Evolution")
+    #     st.write("This chart shows how specific risk factors combined to reach the final probability estimate.")
         
-        steps = [item[0] for item in prob_history]
-        probs = [item[1] * 100 for item in prob_history] # Convert to percentage
+    #     steps = [item[0] for item in prob_history]
+    #     probs = [item[1] * 100 for item in prob_history] # Convert to percentage
         
-        fig2, ax2 = plt.subplots(figsize=(10, 5))
+    #     fig2, ax2 = plt.subplots(figsize=(10, 5))
         
-        # Plot line and markers
-        ax2.plot(steps, probs, marker='o', linestyle='-', color='#1f77b4', markersize=8, linewidth=2)
+    #     # Plot line and markers
+    #     ax2.plot(steps, probs, marker='o', linestyle='-', color='#1f77b4', markersize=8, linewidth=2)
         
-        # Formatting
-        ax2.set_ylabel('AL Probability (%)', fontsize=12)
-        ax2.set_ylim(0, max(probs) + min(100 - max(probs), 15)) # Give headroom, max 100%
+    #     # Formatting
+    #     ax2.set_ylabel('AL Probability (%)', fontsize=12)
+    #     ax2.set_ylim(0, max(probs) + min(100 - max(probs), 15)) # Give headroom, max 100%
         
-        # Rotate x-axis labels to prevent overlap
-        plt.xticks(rotation=45, ha='right', fontsize=10)
-        ax2.grid(True, linestyle='--', alpha=0.5)
+    #     # Rotate x-axis labels to prevent overlap
+    #     plt.xticks(rotation=45, ha='right', fontsize=10)
+    #     ax2.grid(True, linestyle='--', alpha=0.5)
         
-        # Annotate each point with the exact percentage
-        for i, (txt, p) in enumerate(zip(steps, probs)):
-            ax2.annotate(f"{p:.1f}%", (i, p), textcoords="offset points", xytext=(0,10), 
-                         ha='center', fontsize=9, fontweight='bold')
+    #     # Annotate each point with the exact percentage
+    #     for i, (txt, p) in enumerate(zip(steps, probs)):
+    #         ax2.annotate(f"{p:.1f}%", (i, p), textcoords="offset points", xytext=(0,10), 
+    #                      ha='center', fontsize=9, fontweight='bold')
             
-        ax2.spines['top'].set_visible(False)
-        ax2.spines['right'].set_visible(False)
+    #     ax2.spines['top'].set_visible(False)
+    #     ax2.spines['right'].set_visible(False)
         
-        plt.tight_layout()
-        st.pyplot(fig2)
+    #     plt.tight_layout()
+    #     st.pyplot(fig2)
 
     # 5. Render the Explainer Plot (Log-Odds / Technical Audit)
-    if len(adjustments_log) > 0:
-        with st.expander("Technical View: Log-Odds Risk Adjustments"):
-            # Exclude the baseline from the bar chart to focus purely on the deltas
-            labels = [item[0] for item in adjustments_log[1:]]
-            values = [item[1] for item in adjustments_log[1:]]
+    # if len(adjustments_log) > 0:
+    #     with st.expander("Technical View: Log-Odds Risk Adjustments"):
+    #         # Exclude the baseline from the bar chart to focus purely on the deltas
+    #         labels = [item[0] for item in adjustments_log[1:]]
+    #         values = [item[1] for item in adjustments_log[1:]]
             
-            colors = ['salmon' if val > 0 else 'lightgreen' for val in values]
+    #         colors = ['salmon' if val > 0 else 'lightgreen' for val in values]
             
-            # Avoid empty plot error if no adjustments triggered
-            if len(labels) > 0:
-                fig, ax = plt.subplots(figsize=(8, max(4, len(labels) * 0.4)))
-                ax.barh(labels, values, color=colors, edgecolor='black', alpha=0.8)
+    #         # Avoid empty plot error if no adjustments triggered
+    #         if len(labels) > 0:
+    #             fig, ax = plt.subplots(figsize=(8, max(4, len(labels) * 0.4)))
+    #             ax.barh(labels, values, color=colors, edgecolor='black', alpha=0.8)
                 
-                ax.axvline(0, color='black', linewidth=1)
-                ax.set_xlabel('Impact on Risk (Log-Odds)')
-                ax.invert_yaxis()
-                ax.grid(axis='x', linestyle='--', alpha=0.6)
+    #             ax.axvline(0, color='black', linewidth=1)
+    #             ax.set_xlabel('Impact on Risk (Log-Odds)')
+    #             ax.invert_yaxis()
+    #             ax.grid(axis='x', linestyle='--', alpha=0.6)
                 
-                for i, v in enumerate(values):
-                    ha = 'left' if v > 0 else 'right'
-                    offset = 0.01 if v > 0 else -0.01
-                    ax.text(v + offset, i, f"{v:+.2f}", va='center', ha=ha, fontsize=10)
+    #             for i, v in enumerate(values):
+    #                 ha = 'left' if v > 0 else 'right'
+    #                 offset = 0.01 if v > 0 else -0.01
+    #                 ax.text(v + offset, i, f"{v:+.2f}", va='center', ha=ha, fontsize=10)
                     
-                ax.spines['top'].set_visible(False)
-                ax.spines['right'].set_visible(False)
+    #             ax.spines['top'].set_visible(False)
+    #             ax.spines['right'].set_visible(False)
                 
-                plt.tight_layout()
-                st.pyplot(fig)
-            else:
-                st.write("No clinical risk adjustments were triggered beyond the population baseline.")
+    #             plt.tight_layout()
+    #             st.pyplot(fig)
+    #         else:
+    #             st.write("No clinical risk adjustments were triggered beyond the population baseline.")
     
     return None
 
@@ -729,8 +800,8 @@ model_1 , model_2 , model_3 , model_4 , meta_model = initialize_app()
 with st.sidebar:
     selected = option_menu(
         menu_title = 'Main Menu',
-        options = ['Home' , 'Prediction' , 'Examples'],
-        icons = ['house' , 'book' , 'book'],
+        options = ['Home' , 'Prediction' ],
+        icons = ['house' , 'book' ],
         menu_icon = 'cast',
         default_index = 0,
         orientation = 'Vertical')
