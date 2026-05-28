@@ -542,14 +542,15 @@ def parser_input(dataframe_input):
     # 2. Evaluate All Features
     
     # Age
-    # Age
     age_val = dataframe_input['age'].values[0]
     if age_val >= RISK_THRESHOLDS['age_high']:
         extra_years = age_val - RISK_THRESHOLDS['age_high']
         bump = LOG_ODDS_MULTIPLIERS['age_high'] + (extra_years * LOG_ODDS_MULTIPLIERS['age_incremental_per_year'])
         apply_adjustment(f'High Age ({age_val})', bump)
     elif age_val <= RISK_THRESHOLDS['age_low']:
-        apply_adjustment(f'Low Age ({age_val})', LOG_ODDS_MULTIPLIERS['age_low'])
+        extra_years = age_val - RISK_THRESHOLDS['age_low']
+        bump = LOG_ODDS_MULTIPLIERS['age_low'] + (extra_years * LOG_ODDS_MULTIPLIERS['age_incremental_per_year'])
+        apply_adjustment(f'Low Age ({age_val})', bump)
 
     # BMI
     bmi_val = dataframe_input['bmi'].values[0]
@@ -564,6 +565,10 @@ def parser_input(dataframe_input):
         deficit = RISK_THRESHOLDS['hgb_low'] - hgb_val
         bump = LOG_ODDS_MULTIPLIERS['hemoglobin_low'] + (deficit * LOG_ODDS_MULTIPLIERS['hgb_incremental_per_point'])
         apply_adjustment(f'Low Hemoglobin ({hgb_val})', bump)
+    elif hgb_val != -1 and hgb_val > RISK_THRESHOLDS['hgb_low']:
+        deficit = RISK_THRESHOLDS['hgb_low'] - hgb_val
+        bump = -LOG_ODDS_MULTIPLIERS['hemoglobin_low'] + (deficit * LOG_ODDS_MULTIPLIERS['hgb_incremental_per_point'])
+        apply_adjustment(f'Good Hemoglobin ({hgb_val})', bump)
 
     wbc_val = dataframe_input['wbc_count'].values[0]
     if wbc_val != -1:
@@ -571,11 +576,14 @@ def parser_input(dataframe_input):
             extra = wbc_val - RISK_THRESHOLDS['wbc_high']
             bump = LOG_ODDS_MULTIPLIERS['wbc_abnormal'] + (extra * LOG_ODDS_MULTIPLIERS['wbc_incremental_per_point'])
             apply_adjustment(f'High WBC ({wbc_val})', bump)
-            
         elif wbc_val <= RISK_THRESHOLDS['wbc_low']:
             deficit = RISK_THRESHOLDS['wbc_low'] - wbc_val
             bump = LOG_ODDS_MULTIPLIERS['wbc_abnormal'] + (deficit * LOG_ODDS_MULTIPLIERS['wbc_incremental_per_point'])
             apply_adjustment(f'Low WBC ({wbc_val})', bump)
+        else:
+            extra = wbc_val - RISK_THRESHOLDS['wbc_high']
+            bump = LOG_ODDS_MULTIPLIERS['wbc_abnormal'] + (extra * LOG_ODDS_MULTIPLIERS['wbc_incremental_per_point'] * 0.5)
+            apply_adjustment(f'Mid WBC ({wbc_val})', bump)
 
     # Albumin (calculated per 0.1 drop for finer granularity)
     alb_val = dataframe_input['alb_lvl'].values[0]
@@ -587,6 +595,10 @@ def parser_input(dataframe_input):
             apply_adjustment(f'Low Albumin ({alb_val})', bump)
         elif alb_val >= RISK_THRESHOLDS['albumin_good']:
             apply_adjustment(f'Good Albumin ({alb_val})', LOG_ODDS_MULTIPLIERS['albumin_good'])
+        else:
+            deficit_units = (RISK_THRESHOLDS['albumin_low'] - alb_val) * 10
+            bump = LOG_ODDS_MULTIPLIERS['albumin_low'] + (deficit_units * LOG_ODDS_MULTIPLIERS['albumin_incremental_per_0_1'] *0.5)
+            apply_adjustment(f'Mid Albumin ({alb_val})', bump)
 
     # CRP Level
     crp_val = dataframe_input['crp_lvl'].values[0]
@@ -722,68 +734,68 @@ def parser_input(dataframe_input):
     )
     
     # 4. Render the Probability Trajectory Plot (For Customers)
-    if len(prob_history) > 1:
-        st.subheader("Probability Evolution")
-        st.write("This chart shows how specific risk factors combined to reach the final probability estimate.")
+    # if len(prob_history) > 1:
+    #     st.subheader("Probability Evolution")
+    #     st.write("This chart shows how specific risk factors combined to reach the final probability estimate.")
         
-        steps = [item[0] for item in prob_history]
-        probs = [item[1] * 100 for item in prob_history] # Convert to percentage
+    #     steps = [item[0] for item in prob_history]
+    #     probs = [item[1] * 100 for item in prob_history] # Convert to percentage
         
-        fig2, ax2 = plt.subplots(figsize=(10, 5))
+    #     fig2, ax2 = plt.subplots(figsize=(10, 5))
         
-        # Plot line and markers
-        ax2.plot(steps, probs, marker='o', linestyle='-', color='#1f77b4', markersize=8, linewidth=2)
+    #     # Plot line and markers
+    #     ax2.plot(steps, probs, marker='o', linestyle='-', color='#1f77b4', markersize=8, linewidth=2)
         
-        # Formatting
-        ax2.set_ylabel('AL Probability (%)', fontsize=12)
-        ax2.set_ylim(0, max(probs) + min(100 - max(probs), 15)) # Give headroom, max 100%
+    #     # Formatting
+    #     ax2.set_ylabel('AL Probability (%)', fontsize=12)
+    #     ax2.set_ylim(0, max(probs) + min(100 - max(probs), 15)) # Give headroom, max 100%
         
-        # Rotate x-axis labels to prevent overlap
-        plt.xticks(rotation=45, ha='right', fontsize=10)
-        ax2.grid(True, linestyle='--', alpha=0.5)
+    #     # Rotate x-axis labels to prevent overlap
+    #     plt.xticks(rotation=45, ha='right', fontsize=10)
+    #     ax2.grid(True, linestyle='--', alpha=0.5)
         
-        # Annotate each point with the exact percentage
-        for i, (txt, p) in enumerate(zip(steps, probs)):
-            ax2.annotate(f"{p:.1f}%", (i, p), textcoords="offset points", xytext=(0,10), 
-                         ha='center', fontsize=9, fontweight='bold')
+    #     # Annotate each point with the exact percentage
+    #     for i, (txt, p) in enumerate(zip(steps, probs)):
+    #         ax2.annotate(f"{p:.1f}%", (i, p), textcoords="offset points", xytext=(0,10), 
+    #                      ha='center', fontsize=9, fontweight='bold')
             
-        ax2.spines['top'].set_visible(False)
-        ax2.spines['right'].set_visible(False)
+    #     ax2.spines['top'].set_visible(False)
+    #     ax2.spines['right'].set_visible(False)
         
-        plt.tight_layout()
-        st.pyplot(fig2)
+    #     plt.tight_layout()
+    #     st.pyplot(fig2)
 
     # 5. Render the Explainer Plot (Log-Odds / Technical Audit)
-    if len(adjustments_log) > 0:
-        with st.expander("Technical View: Log-Odds Risk Adjustments"):
-            # Exclude the baseline from the bar chart to focus purely on the deltas
-            labels = [item[0] for item in adjustments_log[1:]]
-            values = [item[1] for item in adjustments_log[1:]]
+    # if len(adjustments_log) > 0:
+    #     with st.expander("Technical View: Log-Odds Risk Adjustments"):
+    #         # Exclude the baseline from the bar chart to focus purely on the deltas
+    #         labels = [item[0] for item in adjustments_log[1:]]
+    #         values = [item[1] for item in adjustments_log[1:]]
             
-            colors = ['salmon' if val > 0 else 'lightgreen' for val in values]
+    #         colors = ['salmon' if val > 0 else 'lightgreen' for val in values]
             
-            # Avoid empty plot error if no adjustments triggered
-            if len(labels) > 0:
-                fig, ax = plt.subplots(figsize=(8, max(4, len(labels) * 0.4)))
-                ax.barh(labels, values, color=colors, edgecolor='black', alpha=0.8)
+    #         # Avoid empty plot error if no adjustments triggered
+    #         if len(labels) > 0:
+    #             fig, ax = plt.subplots(figsize=(8, max(4, len(labels) * 0.4)))
+    #             ax.barh(labels, values, color=colors, edgecolor='black', alpha=0.8)
                 
-                ax.axvline(0, color='black', linewidth=1)
-                ax.set_xlabel('Impact on Risk (Log-Odds)')
-                ax.invert_yaxis()
-                ax.grid(axis='x', linestyle='--', alpha=0.6)
+    #             ax.axvline(0, color='black', linewidth=1)
+    #             ax.set_xlabel('Impact on Risk (Log-Odds)')
+    #             ax.invert_yaxis()
+    #             ax.grid(axis='x', linestyle='--', alpha=0.6)
                 
-                for i, v in enumerate(values):
-                    ha = 'left' if v > 0 else 'right'
-                    offset = 0.01 if v > 0 else -0.01
-                    ax.text(v + offset, i, f"{v:+.2f}", va='center', ha=ha, fontsize=10)
+    #             for i, v in enumerate(values):
+    #                 ha = 'left' if v > 0 else 'right'
+    #                 offset = 0.01 if v > 0 else -0.01
+    #                 ax.text(v + offset, i, f"{v:+.2f}", va='center', ha=ha, fontsize=10)
                     
-                ax.spines['top'].set_visible(False)
-                ax.spines['right'].set_visible(False)
+    #             ax.spines['top'].set_visible(False)
+    #             ax.spines['right'].set_visible(False)
                 
-                plt.tight_layout()
-                st.pyplot(fig)
-            else:
-                st.write("No clinical risk adjustments were triggered beyond the population baseline.")
+    #             plt.tight_layout()
+    #             st.pyplot(fig)
+    #         else:
+    #             st.write("No clinical risk adjustments were triggered beyond the population baseline.")
     
     return None
 
